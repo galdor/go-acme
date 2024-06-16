@@ -2,6 +2,9 @@ package acme
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +13,7 @@ import (
 	"time"
 )
 
-func newHTTPClient() *http.Client {
+func NewHTTPClient(caCertPool *x509.CertPool) *http.Client {
 	transport := http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 
@@ -22,6 +25,23 @@ func newHTTPClient() *http.Client {
 		MaxIdleConns: 10,
 
 		IdleConnTimeout: 60 * time.Second,
+	}
+
+	transport.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		tlsCfg := tls.Config{
+			RootCAs: caCertPool,
+		}
+
+		dialer := &tls.Dialer{
+			NetDialer: &net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			},
+
+			Config: &tlsCfg,
+		}
+
+		return dialer.DialContext(ctx, network, address)
 	}
 
 	client := http.Client{

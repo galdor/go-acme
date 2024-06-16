@@ -21,7 +21,7 @@ type Client struct {
 
 func NewClient(cfg ClientCfg) (*Client, error) {
 	if cfg.HTTPClient == nil {
-		cfg.HTTPClient = newHTTPClient()
+		cfg.HTTPClient = NewHTTPClient(nil)
 	}
 
 	c := Client{
