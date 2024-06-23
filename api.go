@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -43,11 +44,11 @@ const (
 
 type APIError struct {
 	// RFC 7807 3.1. Members of a Problem Details Object
-	Type     string `json:"type,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Status   int    `json:"status,omitempty"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
+	Type     ErrorType `json:"type,omitempty"`
+	Title    string    `json:"title,omitempty"`
+	Status   int       `json:"status,omitempty"`
+	Detail   string    `json:"detail,omitempty"`
+	Instance string    `json:"instance,omitempty"`
 
 	// RFC 8555 6.7.1. Subproblems
 	Subproblems []APIError `json:"subproblems,omitempty"`
@@ -56,7 +57,7 @@ type APIError struct {
 func (err *APIError) FormatErrorString(buf *bytes.Buffer, indent string) {
 	if err.Type != "" {
 		buf.WriteString(indent)
-		buf.WriteString(err.Type)
+		buf.WriteString(string(err.Type))
 	}
 
 	if err.Title != "" {
@@ -127,7 +128,36 @@ func NewHTTPClient(caCertPool *x509.CertPool) *http.Client {
 	return &client
 }
 
-func (c *Client) sendRequest(method string, uri string, reqBody, resBody any) (*http.Response, error) {
+func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Response, error) {
+	const nbAttempts = 3
+
+	var lastBadNonceError error
+
+	for i := 0; i < nbAttempts; i++ {
+		nonce, err := c.nextNonce()
+		if err != nil {
+			return nil, fmt.Errorf("cannot obtain nonce: %w", err)
+		}
+
+		res, err := c.sendRequestWithNonce(method, uri, reqBody, resBody, nonce)
+		if err != nil {
+			var apiErr *APIError
+
+			if errors.As(err, &apiErr) && apiErr.Type == ErrorTypeBadNonce {
+				lastBadNonceError = apiErr
+				continue
+			}
+
+			return nil, err
+		}
+
+		return res, nil
+	}
+
+	return nil, lastBadNonceError
+}
+
+func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, nonce string) (*http.Response, error) {
 	var reqBodyData []byte
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -139,8 +169,13 @@ func (c *Client) sendRequest(method string, uri string, reqBody, resBody any) (*
 	}
 
 	var reqBodyReader io.Reader
+
 	if method != "HEAD" && uri != c.Cfg.DirectoryURI {
-		signedData, err := c.signPayload(reqBodyData)
+		if nonce == "" {
+			return nil, fmt.Errorf("cannot sign request without a nonce")
+		}
+
+		signedData, err := c.signPayload(reqBodyData, nonce)
 		if err != nil {
 			return nil, fmt.Errorf("cannot sign request body data: %w", err)
 		}
@@ -161,6 +196,10 @@ func (c *Client) sendRequest(method string, uri string, reqBody, resBody any) (*
 		return nil, fmt.Errorf("cannot send request: %w", err)
 	}
 	defer res.Body.Close()
+
+	if nonce := res.Header.Get("Replay-Nonce"); nonce != "" {
+		c.storeNonce(nonce)
+	}
 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -189,15 +228,11 @@ func (c *Client) sendRequest(method string, uri string, reqBody, resBody any) (*
 }
 
 func (c *Client) fetchNonce() (string, error) {
-	res, err := c.sendRequest("HEAD", c.Directory.NewNonce, nil, nil)
+	res, err := c.sendRequestWithNonce("HEAD", c.Directory.NewNonce,
+		nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("cannot send request: %w", err)
 	}
-
-	// XXX Soon will be unecessary: we want sendRequest to call storeNonce on
-	// its own. That means that Client.nextOnce should call fetchNonce in a loop
-	// until a nonce is available in the slice (there could be multiple
-	// concurrent calls consuming nonces).
 
 	nonce := res.Header.Get("Replay-Nonce")
 	if nonce == "" {

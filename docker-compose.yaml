@@ -1,12 +1,13 @@
-version: "3"
 services:
   pebble:
+    container_name: "go-acme-pebble"
     image: "ghcr.io/letsencrypt/pebble:latest"
     command: >
       -config test/config/pebble-config.json
       -strict
       -dnsserver 10.30.50.3:8053
-    container_name: "go-acme-pebble"
+    environment:
+      PEBBLE_WFE_NONCEREJECT: "50"
     ports:
       - "14000:14000" # ACME API
       - "15000:15000" # management API
@@ -14,11 +15,11 @@ services:
       acme:
         ipv4_address: "10.30.50.2"
   challtestsrv:
+    container_name: "go-acme-pebble-challtestsrv"
     image: "ghcr.io/letsencrypt/pebble-challtestsrv:latest"
     command: >
       -defaultIPv6 ""
       -defaultIPv4 10.30.50.3
-    container_name: "go-acme-pebble-challtestsrv"
     ports:
       - "8055:8055" # management API
     networks:

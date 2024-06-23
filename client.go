@@ -30,7 +30,6 @@ type Client struct {
 	httpClient  *http.Client
 	dataStore   DataStore
 	accountData *AccountData
-	nonceSource *joseNonceSource
 }
 
 func NewClient(cfg ClientCfg) (*Client, error) {
@@ -56,8 +55,6 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 		httpClient: cfg.HTTPClient,
 		dataStore:  cfg.DataStore,
 	}
-
-	c.nonceSource = &joseNonceSource{Client: &c}
 
 	if err := c.updateDirectory(); err != nil {
 		return nil, fmt.Errorf("cannot update directory: %w", err)

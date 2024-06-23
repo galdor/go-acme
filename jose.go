@@ -9,7 +9,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 )
 
-func (c *Client) signPayload(data []byte) ([]byte, error) {
+func (c *Client) signPayload(data []byte, nonce string) ([]byte, error) {
 	// RFC 8555 6.2. Request Authentication
 
 	algorithm, err := c.signatureAlgorithm()
@@ -31,7 +31,7 @@ func (c *Client) signPayload(data []byte) ([]byte, error) {
 	}
 
 	options := jose.SignerOptions{
-		NonceSource:  c.nonceSource,
+		NonceSource:  &staticNonceSource{nonce: nonce},
 		ExtraHeaders: make(map[jose.HeaderKey]any),
 	}
 
@@ -86,10 +86,17 @@ func (c *Client) signatureAlgorithm() (jose.SignatureAlgorithm, error) {
 	return algorithm, nil
 }
 
-type joseNonceSource struct {
-	Client *Client
+type staticNonceSource struct {
+	nonce string
 }
 
-func (s *joseNonceSource) Nonce() (string, error) {
-	return s.Client.nextNonce()
+func (s *staticNonceSource) Nonce() (string, error) {
+	if s.nonce == "" {
+		return "", fmt.Errorf("nonce already used")
+	}
+
+	nonce := s.nonce
+	s.nonce = ""
+
+	return nonce, nil
 }
