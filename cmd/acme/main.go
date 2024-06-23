@@ -14,8 +14,12 @@ func main() {
 	// Program
 	p = program.NewProgram("acme", "ACME client")
 
-	p.AddOption("d", "directory", "uri", acme.LetsEncryptStagingDirectoryURI,
-		"the URI of the ACME directory")
+	p.AddOption("s", "server", "uri", acme.LetsEncryptStagingDirectoryURI,
+		"the directory URI of the ACME server")
+	p.AddOption("d", "data-store", "path", "acme",
+		"the path of the data store directory")
+	p.AddOption("c", "contact", "URI", "",
+		"a contact URI used when creating a new account")
 	p.AddFlag("", "pebble", "use Pebble as ACME server")
 
 	p.AddCommand("directory", "print the content of an ACME directory",
@@ -23,18 +27,35 @@ func main() {
 
 	p.ParseCommandLine()
 
+	// Data store
+	dataStorePath := p.OptionValue("data-store")
+
+	p.Info("using data store at %q", dataStorePath)
+
+	dataStore, err := acme.NewFileSystemDataStore(dataStorePath)
+	if err != nil {
+		p.Fatal("cannot create data store: %v", err)
+	}
+
 	// ACME client
 	usePebble := p.IsOptionSet("pebble")
 
-	directoryURI := p.OptionValue("directory")
-	if usePebble && !p.IsOptionSet("directory") {
+	directoryURI := p.OptionValue("server")
+	if usePebble && !p.IsOptionSet("server") {
 		directoryURI = acme.PebbleDirectoryURI
 	}
 
-	p.Info("using ACME directory %q", directoryURI)
+	contactURI := p.OptionValue("contact")
+	if usePebble && !p.IsOptionSet("contact") {
+		contactURI = "mailto:test@example.com"
+	}
+
+	p.Info("using ACME server %q", directoryURI)
 
 	clientCfg := acme.ClientCfg{
+		DataStore:    dataStore,
 		DirectoryURI: directoryURI,
+		ContactURIs:  []string{contactURI},
 	}
 
 	if usePebble {
@@ -42,7 +63,6 @@ func main() {
 			acme.NewHTTPClient(acme.PebbleCACertificatePool())
 	}
 
-	var err error
 	client, err = acme.NewClient(clientCfg)
 	if err != nil {
 		p.Fatal("cannot create client: %v", err)

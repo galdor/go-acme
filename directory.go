@@ -26,7 +26,7 @@ type DirectoryMetadata struct {
 func (c *Client) updateDirectory() error {
 	var d Directory
 
-	_, err := c.sendHTTPRequest("GET", c.Cfg.DirectoryURI, nil, &d)
+	_, err := c.sendRequest("GET", c.Cfg.DirectoryURI, nil, &d)
 	if err != nil {
 		return fmt.Errorf("cannot fetch %q: %w", c.Cfg.DirectoryURI, err)
 	}
