@@ -1,0 +1,23 @@
+name: "test"
+
+on:
+  - "push"
+
+jobs:
+  test:
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+    steps:
+      - uses: "actions/checkout@v4"
+      - name: "Setup Go"
+        uses: "actions/setup-go@v5"
+        with:
+          go-version: "1.22"
+      - name: "Build the project"
+        run: "make build"
+      - name: "Run analysis tools"
+        run: "make check"
+      - name: "Run docker-compose"
+        run: "docker-compose up --quiet-pull -d"
+      - name: "Run tests"
+        run: "make test"
