@@ -42,7 +42,7 @@ const (
 	ErrorTypeUserActionRequired      ErrorType = "urn:ietf:params:acme:error:userActionRequired"
 )
 
-type APIError struct {
+type ProblemDetails struct {
 	// RFC 7807 3.1. Members of a Problem Details Object
 	Type     ErrorType `json:"type,omitempty"`
 	Title    string    `json:"title,omitempty"`
@@ -51,10 +51,10 @@ type APIError struct {
 	Instance string    `json:"instance,omitempty"`
 
 	// RFC 8555 6.7.1. Subproblems
-	Subproblems []APIError `json:"subproblems,omitempty"`
+	Subproblems []ProblemDetails `json:"subproblems,omitempty"`
 }
 
-func (err *APIError) FormatErrorString(buf *bytes.Buffer, indent string) {
+func (err *ProblemDetails) FormatErrorString(buf *bytes.Buffer, indent string) {
 	if err.Type != "" {
 		buf.WriteString(indent)
 		buf.WriteString(string(err.Type))
@@ -88,7 +88,7 @@ func (err *APIError) FormatErrorString(buf *bytes.Buffer, indent string) {
 	}
 }
 
-func (err *APIError) Error() string {
+func (err *ProblemDetails) Error() string {
 	var buf bytes.Buffer
 	err.FormatErrorString(&buf, "")
 	return buf.String()
@@ -141,10 +141,10 @@ func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Re
 
 		res, err := c.sendRequestWithNonce(method, uri, reqBody, resBody, nonce)
 		if err != nil {
-			var apiErr *APIError
+			var details *ProblemDetails
 
-			if errors.As(err, &apiErr) && apiErr.Type == ErrorTypeBadNonce {
-				lastBadNonceError = apiErr
+			if errors.As(err, &details) && details.Type == ErrorTypeBadNonce {
+				lastBadNonceError = details
 				continue
 			}
 
@@ -209,9 +209,9 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 	status := res.StatusCode
 
 	if status < 200 || status > 300 {
-		var apiErr APIError
-		if err := json.Unmarshal(data, &apiErr); err == nil {
-			return res, &apiErr
+		var details ProblemDetails
+		if err := json.Unmarshal(data, &details); err == nil {
+			return res, &details
 		}
 
 		return res, fmt.Errorf("request failed with status %d: %s",
