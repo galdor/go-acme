@@ -24,6 +24,8 @@ type DirectoryMetadata struct {
 }
 
 func (c *Client) updateDirectory() error {
+	c.Log.Debug(1, "updating directory")
+
 	var d Directory
 
 	_, err := c.sendRequestWithNonce("GET", c.Cfg.DirectoryURI, nil, &d, "")

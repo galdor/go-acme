@@ -25,6 +25,8 @@ type Account struct {
 }
 
 func (c *Client) createAccount() (*AccountData, error) {
+	c.Log.Debug(1, "creating account")
+
 	privateKey, err := c.Cfg.GeneratePrivateKey()
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate private key: %w", err)

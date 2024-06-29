@@ -11,6 +11,7 @@ import (
 type PrivateKeyGenerationFunc func() (crypto.Signer, error)
 
 type ClientCfg struct {
+	Log                Logger                   `json:"-"`
 	HTTPClient         *http.Client             `json:"-"`
 	DataStore          DataStore                `json:"-"`
 	GeneratePrivateKey PrivateKeyGenerationFunc `json:"-"`
@@ -21,6 +22,7 @@ type ClientCfg struct {
 }
 
 type Client struct {
+	Log       Logger
 	Cfg       ClientCfg
 	Directory *Directory
 
@@ -33,6 +35,10 @@ type Client struct {
 }
 
 func NewClient(cfg ClientCfg) (*Client, error) {
+	if cfg.Log == nil {
+		cfg.Log = NewDefaultLogger()
+	}
+
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = NewHTTPClient(nil)
 	}
@@ -50,6 +56,7 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 	}
 
 	c := Client{
+		Log: cfg.Log,
 		Cfg: cfg,
 
 		httpClient: cfg.HTTPClient,
@@ -75,6 +82,8 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 			return nil, fmt.Errorf("cannot load account data: %w", err)
 		}
 	}
+
+	c.Log.Info("using account %q", accountData.URI)
 	c.accountData = accountData
 
 	return &c, nil

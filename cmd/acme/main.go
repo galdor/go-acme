@@ -53,6 +53,7 @@ func main() {
 	p.Info("using ACME server %q", directoryURI)
 
 	clientCfg := acme.ClientCfg{
+		Log:          p,
 		DataStore:    dataStore,
 		DirectoryURI: directoryURI,
 		ContactURIs:  []string{contactURI},
