@@ -52,7 +52,7 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 	}
 
 	if cfg.UserAgent == "" {
-		cfg.UserAgent = "go-acme"
+		cfg.UserAgent = "go-acme (https://github.com/galdor/go-acme)"
 	}
 
 	c := Client{
