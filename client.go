@@ -104,6 +104,7 @@ func (c *Client) nextNonce() (string, error) {
 	if len(c.nonces) > 0 {
 		nonce := c.nonces[0]
 		c.nonces = c.nonces[1:]
+		c.noncesMutex.Unlock()
 		return nonce, nil
 	}
 	c.noncesMutex.Unlock()

@@ -129,7 +129,10 @@ func NewHTTPClient(caCertPool *x509.CertPool) *http.Client {
 }
 
 func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Response, error) {
-	const nbAttempts = 3
+	nbAttempts := 3
+	if c.Cfg.DirectoryURI == PebbleDirectoryURI {
+		nbAttempts = 100
+	}
 
 	var lastBadNonceError error
 
@@ -140,18 +143,17 @@ func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Re
 		}
 
 		res, err := c.sendRequestWithNonce(method, uri, reqBody, resBody, nonce)
-		if err != nil {
+		if err == nil {
+			return res, nil
+		} else {
 			var details *ProblemDetails
 
-			if errors.As(err, &details) && details.Type == ErrorTypeBadNonce {
-				lastBadNonceError = details
-				continue
+			if !errors.As(err, &details) || details.Type != ErrorTypeBadNonce {
+				return nil, err
 			}
 
-			return nil, err
+			lastBadNonceError = err
 		}
-
-		return res, nil
 	}
 
 	return nil, lastBadNonceError
@@ -197,8 +199,15 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 	}
 	defer res.Body.Close()
 
-	if nonce := res.Header.Get("Replay-Nonce"); nonce != "" {
-		c.storeNonce(nonce)
+	c.Log.Debug(2, "%s %s %d", method, uri, res.StatusCode)
+
+	// When sending a request without a nonce (i.e. a request to the newNonce
+	// endpoint), we do not want to store it since we are going to use it
+	// immediately.
+	if nonce != "" {
+		if nonce := res.Header.Get("Replay-Nonce"); nonce != "" {
+			c.storeNonce(nonce)
+		}
 	}
 
 	data, err := io.ReadAll(res.Body)
@@ -206,9 +215,7 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 		return res, fmt.Errorf("cannot read response body: %w", err)
 	}
 
-	status := res.StatusCode
-
-	if status < 200 || status > 300 {
+	if status := res.StatusCode; status < 200 || status > 300 {
 		var details ProblemDetails
 		if err := json.Unmarshal(data, &details); err == nil {
 			return res, &details
