@@ -9,7 +9,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 )
 
-func (c *Client) signPayload(data []byte, nonce string) ([]byte, error) {
+func (c *Client) signPayload(data []byte, uri, nonce string) ([]byte, error) {
 	// RFC 8555 6.2. Request Authentication
 
 	algorithm, err := c.signatureAlgorithm()
@@ -35,12 +35,6 @@ func (c *Client) signPayload(data []byte, nonce string) ([]byte, error) {
 		ExtraHeaders: make(map[jose.HeaderKey]any),
 	}
 
-	var uri string
-	if c.accountData.URI == "" {
-		uri = c.Directory.NewAccount
-	} else {
-		uri = c.accountData.URI
-	}
 	options.ExtraHeaders["url"] = uri
 
 	if jwk.KeyID == "" {

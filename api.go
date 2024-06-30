@@ -177,7 +177,7 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 			return nil, fmt.Errorf("cannot sign request without a nonce")
 		}
 
-		signedData, err := c.signPayload(reqBodyData, nonce)
+		signedData, err := c.signPayload(reqBodyData, uri, nonce)
 		if err != nil {
 			return nil, fmt.Errorf("cannot sign request body data: %w", err)
 		}
