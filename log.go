@@ -2,6 +2,8 @@ package acme
 
 import (
 	"fmt"
+	"log"
+	stdlog "log"
 	"os"
 )
 
@@ -27,4 +29,17 @@ func (log DefaultLogger) Info(format string, args ...any) {
 
 func (log DefaultLogger) Error(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
+}
+
+type StdErrorLogger struct {
+	Log Logger
+}
+
+func NewStdErrorLogger(log Logger) *log.Logger {
+	return stdlog.New(&StdErrorLogger{Log: log}, "", 0)
+}
+
+func (log *StdErrorLogger) Write(data []byte) (int, error) {
+	log.Log.Error("%s", string(data))
+	return len(data), nil
 }

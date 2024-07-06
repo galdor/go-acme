@@ -1,6 +1,7 @@
 package acme
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -23,12 +24,13 @@ type DirectoryMetadata struct {
 	ExternalAccountRequired bool     `json:"externalAccountRequired,omitempty"`
 }
 
-func (c *Client) updateDirectory() error {
+func (c *Client) updateDirectory(ctx context.Context) error {
 	c.Log.Debug(1, "updating directory")
 
 	var d Directory
 
-	_, err := c.sendRequestWithNonce("GET", c.Cfg.DirectoryURI, nil, &d, "")
+	_, err := c.sendRequestWithNonce(ctx, "GET", c.Cfg.DirectoryURI,
+		nil, &d, "")
 	if err != nil {
 		return fmt.Errorf("cannot fetch %q: %w", c.Cfg.DirectoryURI, err)
 	}

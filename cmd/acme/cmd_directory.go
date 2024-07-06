@@ -6,6 +6,11 @@ import (
 	"github.com/galdor/go-program"
 )
 
+func addDirectoryCommand() {
+	p.AddCommand("directory", "print the content of an ACME directory",
+		cmdDirectory)
+}
+
 func cmdDirectory(p *program.Program) {
 	d := client.Directory
 

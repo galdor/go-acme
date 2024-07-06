@@ -5,30 +5,8 @@ services:
     command: >
       -config test/config/pebble-config.json
       -strict
-      -dnsserver 10.30.50.3:8053
+      -dnsserver localhost:53
     environment:
       PEBBLE_WFE_NONCEREJECT: "50"
-    ports:
-      - "14000:14000" # ACME API
-      - "15000:15000" # management API
-    networks:
-      acme:
-        ipv4_address: "10.30.50.2"
-  challtestsrv:
-    container_name: "go-acme-pebble-challtestsrv"
-    image: "ghcr.io/letsencrypt/pebble-challtestsrv:latest"
-    command: >
-      -defaultIPv6 ""
-      -defaultIPv4 10.30.50.3
-    ports:
-      - "8055:8055" # management API
-    networks:
-      acme:
-        ipv4_address: "10.30.50.3"
-networks:
-  acme:
-    driver: "bridge"
-    ipam:
-      driver: "default"
-      config:
-        - subnet: "10.30.50.0/24"
+      PEBBLE_VA_NOSLEEP: "1"
+    network_mode: "host"

@@ -2,6 +2,7 @@ package acme
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -128,7 +129,7 @@ func NewHTTPClient(caCertPool *x509.CertPool) *http.Client {
 	return &client
 }
 
-func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Response, error) {
+func (c *Client) sendRequest(ctx context.Context, method, uri string, reqBody, resBody any) (*http.Response, error) {
 	nbAttempts := 3
 	if c.Cfg.DirectoryURI == PebbleDirectoryURI {
 		nbAttempts = 100
@@ -137,12 +138,12 @@ func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Re
 	var lastBadNonceError error
 
 	for i := 0; i < nbAttempts; i++ {
-		nonce, err := c.nextNonce()
+		nonce, err := c.nextNonce(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("cannot obtain nonce: %w", err)
 		}
 
-		res, err := c.sendRequestWithNonce(method, uri, reqBody, resBody, nonce)
+		res, err := c.sendRequestWithNonce(ctx, method, uri, reqBody, resBody, nonce)
 		if err == nil {
 			return res, nil
 		} else {
@@ -159,7 +160,7 @@ func (c *Client) sendRequest(method, uri string, reqBody, resBody any) (*http.Re
 	return nil, lastBadNonceError
 }
 
-func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, nonce string) (*http.Response, error) {
+func (c *Client) sendRequestWithNonce(ctx context.Context, method, uri string, reqBody, resBody any, nonce string) (*http.Response, error) {
 	var reqBodyData []byte
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -185,7 +186,7 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 		reqBodyReader = bytes.NewReader(signedData)
 	}
 
-	req, err := http.NewRequest(method, uri, reqBodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, uri, reqBodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create request: %w", err)
 	}
@@ -226,16 +227,22 @@ func (c *Client) sendRequestWithNonce(method, uri string, reqBody, resBody any, 
 	}
 
 	if resBody != nil {
-		if err := json.Unmarshal(data, resBody); err != nil {
-			return res, fmt.Errorf("cannot decode response body: %w", err)
+		switch dest := resBody.(type) {
+		case *[]byte:
+			*dest = data
+
+		default:
+			if err := json.Unmarshal(data, dest); err != nil {
+				return res, fmt.Errorf("cannot decode response body: %w", err)
+			}
 		}
 	}
 
 	return res, nil
 }
 
-func (c *Client) fetchNonce() (string, error) {
-	res, err := c.sendRequestWithNonce("HEAD", c.Directory.NewNonce,
+func (c *Client) fetchNonce(ctx context.Context) (string, error) {
+	res, err := c.sendRequestWithNonce(ctx, "HEAD", c.Directory.NewNonce,
 		nil, nil, "")
 	if err != nil {
 		return "", fmt.Errorf("cannot send request: %w", err)

@@ -46,6 +46,11 @@ func (c *Client) signPayload(data []byte, uri, nonce string) ([]byte, error) {
 		return nil, fmt.Errorf("cannot create signer: %w", err)
 	}
 
+	// Go is stupid
+	if data == nil {
+		data = []byte{}
+	}
+
 	signedData, err := signer.Sign(data)
 	if err != nil {
 		return nil, err

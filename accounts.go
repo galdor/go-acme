@@ -1,6 +1,7 @@
 package acme
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -24,10 +25,10 @@ type Account struct {
 	Orders                 string          `json:"orders"`
 }
 
-func (c *Client) createAccount() (*AccountData, error) {
+func (c *Client) createAccount(ctx context.Context) (*AccountData, error) {
 	c.Log.Debug(1, "creating account")
 
-	privateKey, err := c.Cfg.GeneratePrivateKey()
+	privateKey, err := c.Cfg.GenerateAccountPrivateKey()
 	if err != nil {
 		return nil, fmt.Errorf("cannot generate private key: %w", err)
 	}
@@ -43,7 +44,8 @@ func (c *Client) createAccount() (*AccountData, error) {
 		TermsOfServiceAgreed: true,
 	}
 
-	res, err := c.sendRequest("POST", c.Directory.NewAccount, &newAccount, nil)
+	res, err := c.sendRequest(ctx, "POST", c.Directory.NewAccount,
+		&newAccount, nil)
 	if err != nil {
 		return nil, err
 	}

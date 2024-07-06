@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/galdor/go-acme"
 	"github.com/galdor/go-program"
 )
@@ -19,11 +21,11 @@ func main() {
 	p.AddOption("d", "data-store", "path", "acme",
 		"the path of the data store directory")
 	p.AddOption("c", "contact", "URI", "",
-		"a contact URI used when creating a new account")
+		"the contact URI for the ACME account")
 	p.AddFlag("", "pebble", "use Pebble as ACME server")
 
-	p.AddCommand("directory", "print the content of an ACME directory",
-		cmdDirectory)
+	addDirectoryCommand()
+	addCertificateCommands()
 
 	p.ParseCommandLine()
 
@@ -62,11 +64,19 @@ func main() {
 	if usePebble {
 		clientCfg.HTTPClient =
 			acme.NewHTTPClient(acme.PebbleCACertificatePool())
+
+		clientCfg.HTTPChallengeSolver = &acme.HTTPChallengeSolverCfg{
+			Address: ":5002",
+		}
 	}
 
 	client, err = acme.NewClient(clientCfg)
 	if err != nil {
 		p.Fatal("cannot create client: %v", err)
+	}
+
+	if err := client.Start(context.Background()); err != nil {
+		p.Fatal("cannot start client: %v", err)
 	}
 
 	// Main

@@ -1,37 +1,47 @@
 package acme
 
 import (
+	"context"
 	"crypto"
 	"errors"
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
-type PrivateKeyGenerationFunc func() (crypto.Signer, error)
+type AccountPrivateKeyGenerationFunc func() (crypto.Signer, error)
+type CertificatePrivateKeyGenerationFunc func() (crypto.Signer, error)
 
 type ClientCfg struct {
-	Log                Logger                   `json:"-"`
-	HTTPClient         *http.Client             `json:"-"`
-	DataStore          DataStore                `json:"-"`
-	GeneratePrivateKey PrivateKeyGenerationFunc `json:"-"`
+	Log                           Logger                              `json:"-"`
+	HTTPClient                    *http.Client                        `json:"-"`
+	DataStore                     DataStore                           `json:"-"`
+	GenerateAccountPrivateKey     AccountPrivateKeyGenerationFunc     `json:"-"`
+	GenerateCertificatePrivateKey CertificatePrivateKeyGenerationFunc `json:"-"`
 
 	UserAgent    string   `json:"user_agent"`
 	DirectoryURI string   `json:"directory_uri"`
 	ContactURIs  []string `json:"contact_uris"`
+
+	HTTPChallengeSolver *HTTPChallengeSolverCfg `json:"http_challenge_solver,omitempty"`
 }
 
 type Client struct {
-	Log       Logger
 	Cfg       ClientCfg
+	Log       Logger
 	Directory *Directory
 
 	nonces      []string
 	noncesMutex sync.Mutex
 
-	httpClient  *http.Client
-	dataStore   DataStore
-	accountData *AccountData
+	httpClient          *http.Client
+	httpChallengeSolver *HTTPChallengeSolver
+	dataStore           DataStore
+	accountData         *AccountData
+
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 func NewClient(cfg ClientCfg) (*Client, error) {
@@ -47,8 +57,12 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 		return nil, fmt.Errorf("missing data store")
 	}
 
-	if cfg.GeneratePrivateKey == nil {
-		cfg.GeneratePrivateKey = GenerateECDSAP256PrivateKey
+	if cfg.GenerateAccountPrivateKey == nil {
+		cfg.GenerateAccountPrivateKey = GenerateECDSAP256PrivateKey
+	}
+
+	if cfg.GenerateCertificatePrivateKey == nil {
+		cfg.GenerateCertificatePrivateKey = GenerateECDSAP256PrivateKey
 	}
 
 	if cfg.UserAgent == "" {
@@ -61,35 +75,67 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 
 		httpClient: cfg.HTTPClient,
 		dataStore:  cfg.DataStore,
+
+		stopChan: make(chan struct{}),
 	}
 
-	if err := c.updateDirectory(); err != nil {
-		return nil, fmt.Errorf("cannot update directory: %w", err)
+	if sCfg := cfg.HTTPChallengeSolver; sCfg != nil {
+		if sCfg.Log == nil {
+			sCfg.Log = cfg.Log
+		}
+
+		c.httpChallengeSolver = NewHTTPChallengeSolver(*sCfg)
+	}
+
+	return &c, nil
+}
+
+func (c *Client) Start(ctx context.Context) error {
+	if err := c.updateDirectory(ctx); err != nil {
+		return fmt.Errorf("cannot update directory: %w", err)
 	}
 
 	accountData, err := c.dataStore.LoadAccountData()
 	if err != nil {
-		if errors.Is(err, ErrNoAccount) {
-			accountData, err = c.createAccount()
+		if errors.Is(err, ErrAccountNotFound) {
+			accountData, err = c.createAccount(ctx)
 			if err != nil {
-				return nil, fmt.Errorf("cannot create account: %w", err)
+				return fmt.Errorf("cannot create account: %w", err)
 			}
 
 			if err := c.dataStore.StoreAccountData(accountData); err != nil {
-				return nil, fmt.Errorf("cannot store account data: %w", err)
+				return fmt.Errorf("cannot store account data: %w", err)
 			}
 		} else {
-			return nil, fmt.Errorf("cannot load account data: %w", err)
+			return fmt.Errorf("cannot load account data: %w", err)
 		}
 	}
 
 	c.Log.Info("using account %q", accountData.URI)
 	c.accountData = accountData
 
-	return &c, nil
+	if c.httpChallengeSolver != nil {
+		accountThumbprint, err := accountData.Thumbprint()
+		if err != nil {
+			return fmt.Errorf("cannot compute account thumbprint: %w", err)
+		}
+
+		if err := c.httpChallengeSolver.Start(accountThumbprint); err != nil {
+			return fmt.Errorf("cannot start HTTP challenge solver: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (c *Client) Stop() {
+	if c.httpChallengeSolver != nil {
+		c.httpChallengeSolver.Stop()
+	}
+
+	close(c.stopChan)
+	c.wg.Wait()
+
 	c.httpClient.CloseIdleConnections()
 }
 
@@ -99,7 +145,7 @@ func (c *Client) storeNonce(nonce string) {
 	c.noncesMutex.Unlock()
 }
 
-func (c *Client) nextNonce() (string, error) {
+func (c *Client) nextNonce(ctx context.Context) (string, error) {
 	c.noncesMutex.Lock()
 	if len(c.nonces) > 0 {
 		nonce := c.nonces[0]
@@ -109,10 +155,30 @@ func (c *Client) nextNonce() (string, error) {
 	}
 	c.noncesMutex.Unlock()
 
-	nonce, err := c.fetchNonce()
+	nonce, err := c.fetchNonce(ctx)
 	if err != nil {
 		return "", fmt.Errorf("cannot fetch nonce: %w", err)
 	}
 
 	return nonce, nil
+}
+
+func (c *Client) waitForVerification(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+
+	case <-c.stopChan:
+		return ErrVerificationInterrupted
+
+	case <-ctx.Done():
+		if err := ctx.Err(); errors.Is(err, context.DeadlineExceeded) {
+			return ErrVerificationTimeout
+		} else {
+			return err
+		}
+	}
 }
