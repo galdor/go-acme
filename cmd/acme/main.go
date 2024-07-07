@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/galdor/go-program"
 	"go.n16f.net/acme"
+	"go.n16f.net/program"
 )
 
 var (
