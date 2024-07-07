@@ -1,4 +1,4 @@
-module github.com/galdor/go-acme
+module go.n16f.net/acme
 
 go 1.22.4
 
