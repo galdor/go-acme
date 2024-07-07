@@ -131,6 +131,12 @@ func (w *OrderWorker) validateAuthorization(authURI string, auth *Authorization)
 		return fmt.Errorf("no supported challenge available")
 	}
 
+	if challenge.Status == ChallengeStatusValid {
+		// If the challenge has already been validated with a previous order,
+		// there is no need to go through it again.
+		return nil
+	}
+
 	if err := w.solveChallenge(challenge, auth); err != nil {
 		return fmt.Errorf("cannot solve challenge: %w", err)
 	}
