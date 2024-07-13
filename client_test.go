@@ -15,10 +15,16 @@ func withTestClientWithDataStorePath(t *testing.T, dataStorePath string, fn func
 		t.Fatalf("cannot create data store: %v", err)
 	}
 
+	httpClient := NewHTTPClient(PebbleCACertificatePool())
+
+	httpChallengeSolver := HTTPChallengeSolverCfg{Address: ":5002"}
+
 	clientCfg := ClientCfg{
-		DataStore:    dataStore,
-		DirectoryURI: PebbleDirectoryURI,
-		ContactURIs:  []string{"mailto:test@example.com"},
+		HTTPClient:          httpClient,
+		DataStore:           dataStore,
+		DirectoryURI:        PebbleDirectoryURI,
+		ContactURIs:         []string{"mailto:test@example.com"},
+		HTTPChallengeSolver: &httpChallengeSolver,
 	}
 
 	clientCfg.HTTPClient = NewHTTPClient(PebbleCACertificatePool())
