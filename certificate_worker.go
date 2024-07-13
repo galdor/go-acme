@@ -60,6 +60,8 @@ func (w *OrderWorker) main() {
 	}()
 
 	if err := w.submitOrder(); err != nil {
+		w.fatalError(err)
+		return
 	}
 
 	if err := w.validateAuthorizations(); err != nil {
