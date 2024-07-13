@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -36,14 +37,15 @@ func (a *Authorization) findChallenge(cType ChallengeType) *Challenge {
 	return nil
 }
 
-func (c *Client) fetchAuthorization(ctx context.Context, uri string) (*Authorization, error) {
+func (c *Client) fetchAuthorization(ctx context.Context, uri string) (*Authorization, *http.Response, error) {
 	var auth Authorization
 
-	if _, err := c.sendRequest(ctx, "POST", uri, nil, &auth); err != nil {
-		return nil, err
+	res, err := c.sendRequest(ctx, "POST", uri, nil, &auth)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return &auth, nil
+	return &auth, res, nil
 }
 
 func (c *Client) selectAuthorizationChallenge(auth *Authorization) *Challenge {
@@ -58,13 +60,12 @@ func (c *Client) selectAuthorizationChallenge(auth *Authorization) *Challenge {
 
 func (c *Client) waitForAuthorizationValid(ctx context.Context, uri string) error {
 	for {
-		auth, err := c.fetchAuthorization(ctx, uri)
+		auth, res, err := c.fetchAuthorization(ctx, uri)
 		if err != nil {
 			return fmt.Errorf("cannot fetch authorization: %w", err)
 		}
 
-		// TODO Retry-After
-		delay := time.Second
+		delay := c.waitDelay(res)
 
 		switch auth.Status {
 		case AuthorizationStatusPending:

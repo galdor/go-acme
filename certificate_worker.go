@@ -113,13 +113,13 @@ func (w *OrderWorker) submitOrder() error {
 }
 
 func (w *OrderWorker) validateAuthorizations() error {
-	order, err := w.Client.fetchOrder(w.ctx, w.orderURI)
+	order, _, err := w.Client.fetchOrder(w.ctx, w.orderURI)
 	if err != nil {
 		return fmt.Errorf("cannot fetch order: %w", err)
 	}
 
 	for _, authURI := range order.Authorizations {
-		auth, err := w.Client.fetchAuthorization(w.ctx, authURI)
+		auth, _, err := w.Client.fetchAuthorization(w.ctx, authURI)
 		if err != nil {
 			return fmt.Errorf("cannot fetch authorization: %w", err)
 		}

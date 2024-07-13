@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -72,25 +73,25 @@ func (c *Client) submitOrder(ctx context.Context, newOrder *NewOrder) (string, e
 	return location, nil
 }
 
-func (c *Client) fetchOrder(ctx context.Context, uri string) (*Order, error) {
+func (c *Client) fetchOrder(ctx context.Context, uri string) (*Order, *http.Response, error) {
 	var order Order
 
-	if _, err := c.sendRequest(ctx, "POST", uri, nil, &order); err != nil {
-		return nil, err
+	res, err := c.sendRequest(ctx, "POST", uri, nil, &order)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return &order, nil
+	return &order, res, nil
 }
 
 func (c *Client) waitForOrderReady(ctx context.Context, uri string) (*Order, error) {
 	for {
-		order, err := c.fetchOrder(ctx, uri)
+		order, res, err := c.fetchOrder(ctx, uri)
 		if err != nil {
 			return nil, fmt.Errorf("cannot fetch order: %w", err)
 		}
 
-		// TODO Retry-After
-		delay := time.Second
+		delay := c.waitDelay(res)
 
 		switch order.Status {
 		case OrderStatusPending:
@@ -122,13 +123,12 @@ func (c *Client) waitForOrderReady(ctx context.Context, uri string) (*Order, err
 
 func (c *Client) waitForOrderValid(ctx context.Context, uri string) (*Order, error) {
 	for {
-		order, err := c.fetchOrder(ctx, uri)
+		order, res, err := c.fetchOrder(ctx, uri)
 		if err != nil {
 			return nil, fmt.Errorf("cannot fetch order: %w", err)
 		}
 
-		// TODO Retry-After
-		delay := time.Second
+		delay := c.waitDelay(res)
 
 		switch order.Status {
 		case OrderStatusPending:

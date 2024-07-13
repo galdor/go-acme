@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -167,6 +168,29 @@ func (c *Client) nextNonce(ctx context.Context) (string, error) {
 	}
 
 	return nonce, nil
+}
+
+func (c *Client) waitDelay(res *http.Response) time.Duration {
+	defaultDelay := time.Second
+
+	s := res.Header.Get("Retry-After")
+	if s == "" {
+		return defaultDelay
+	}
+
+	// RFC 7231 7.1.3. Retry-After
+
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err == nil && i >= 0 {
+		return time.Duration(i) * time.Second
+	}
+
+	t, err := time.Parse(http.TimeFormat, s)
+	if err == nil {
+		return time.Until(t)
+	}
+
+	return defaultDelay
 }
 
 func (c *Client) waitForVerification(ctx context.Context, delay time.Duration) error {

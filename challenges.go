@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -129,25 +130,25 @@ func (c *Client) submitChallenge(ctx context.Context, uri string) error {
 	return err
 }
 
-func (c *Client) fetchChallenge(ctx context.Context, uri string) (*Challenge, error) {
+func (c *Client) fetchChallenge(ctx context.Context, uri string) (*Challenge, *http.Response, error) {
 	var challenge Challenge
 
-	if _, err := c.sendRequest(ctx, "POST", uri, nil, &challenge); err != nil {
-		return nil, err
+	res, err := c.sendRequest(ctx, "POST", uri, nil, &challenge)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return &challenge, nil
+	return &challenge, res, nil
 }
 
 func (c *Client) waitForChallengeValid(ctx context.Context, uri string) error {
 	for {
-		challenge, err := c.fetchChallenge(ctx, uri)
+		challenge, res, err := c.fetchChallenge(ctx, uri)
 		if err != nil {
 			return fmt.Errorf("cannot fetch challenge: %w", err)
 		}
 
-		// TODO Retry-After
-		delay := time.Second
+		delay := c.waitDelay(res)
 
 		switch challenge.Status {
 		case ChallengeStatusPending:
