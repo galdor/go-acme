@@ -25,7 +25,7 @@ type DirectoryMetadata struct {
 }
 
 func (c *Client) updateDirectory(ctx context.Context) error {
-	c.Log.Debug(1, "updating directory")
+	c.Log.Debug(1, "updating directory from %q", c.Cfg.DirectoryURI)
 
 	var d Directory
 

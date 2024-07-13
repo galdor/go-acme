@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"go.n16f.net/log"
 )
 
 type OrderWorker struct {
-	Log    Logger
+	Log    *log.Logger
 	Client *Client
 
 	ctx            context.Context
@@ -22,8 +24,14 @@ func newCertificateRequestError(err error) *CertificateRequestResult {
 }
 
 func (c *Client) startOrderWorker(ctx context.Context, certData *CertificateData, resultChan chan *CertificateRequestResult) {
+	logData := log.Data{
+		"certificate": certData.Name,
+	}
+
+	log := c.Log.Child("order_worker", logData)
+
 	w := OrderWorker{
-		Log:    c.Log,
+		Log:    log,
 		Client: c,
 
 		ctx:        ctx,

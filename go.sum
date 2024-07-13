@@ -14,6 +14,8 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.2 h1:+h33VjcLVPDHtOdpUCuF+7gSuG3yGIftsP1YvFihtJ8=
 github.com/stretchr/testify v1.8.2/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
+go.n16f.net/log v0.0.0-20240707140441-2f7ab8f954a8 h1:JMBsdWqNAzrlX+qcr0XBVyV2THCSbcE/SnM3KSekjHk=
+go.n16f.net/log v0.0.0-20240707140441-2f7ab8f954a8/go.mod h1:BIWa3RtuDtvWHeBXuuhWS0NSRauDKbuM6t2WKD7J+fg=
 go.n16f.net/program v0.0.0-20240707135706-c2e994295489 h1:Np60pzzhKakD55sajmaCvc3YKYVgDu0wVHtaVETsyco=
 go.n16f.net/program v0.0.0-20240707135706-c2e994295489/go.mod h1:MKuQtJLHafIg8LvIO6fNzt04Uzab+H3ByU1wphsuz/4=
 golang.org/x/crypto v0.25.0 h1:ypSNr+bnYL2YhwoMt2zPxHFmbAN1KZs/njMG3hxUp30=

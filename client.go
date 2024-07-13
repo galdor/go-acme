@@ -8,13 +8,15 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"go.n16f.net/log"
 )
 
 type AccountPrivateKeyGenerationFunc func() (crypto.Signer, error)
 type CertificatePrivateKeyGenerationFunc func() (crypto.Signer, error)
 
 type ClientCfg struct {
-	Log                           Logger                              `json:"-"`
+	Log                           *log.Logger                         `json:"-"`
 	HTTPClient                    *http.Client                        `json:"-"`
 	DataStore                     DataStore                           `json:"-"`
 	GenerateAccountPrivateKey     AccountPrivateKeyGenerationFunc     `json:"-"`
@@ -29,7 +31,7 @@ type ClientCfg struct {
 
 type Client struct {
 	Cfg       ClientCfg
-	Log       Logger
+	Log       *log.Logger
 	Directory *Directory
 
 	nonces      []string
@@ -46,7 +48,7 @@ type Client struct {
 
 func NewClient(cfg ClientCfg) (*Client, error) {
 	if cfg.Log == nil {
-		cfg.Log = NewDefaultLogger()
+		cfg.Log = log.DefaultLogger("acme")
 	}
 
 	if cfg.HTTPClient == nil {
@@ -95,6 +97,8 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("cannot update directory: %w", err)
 	}
 
+	c.Log.Debug(1, "loading account data")
+
 	accountData, err := c.dataStore.LoadAccountData()
 	if err != nil {
 		if errors.Is(err, ErrAccountNotFound) {
@@ -111,7 +115,9 @@ func (c *Client) Start(ctx context.Context) error {
 		}
 	}
 
+	c.Log.Data["account"] = accountData.URI
 	c.Log.Info("using account %q", accountData.URI)
+
 	c.accountData = accountData
 
 	if c.httpChallengeSolver != nil {

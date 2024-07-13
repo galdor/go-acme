@@ -5,20 +5,23 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"go.n16f.net/log"
 )
 
 type HTTPChallengeSolverCfg struct {
-	Log               Logger `json:"-"`
-	AccountThumbprint string `json:"-"`
+	Log               *log.Logger `json:"-"`
+	AccountThumbprint string      `json:"-"`
 
 	Address string `json:"address"`
 }
 
 type HTTPChallengeSolver struct {
 	Cfg HTTPChallengeSolverCfg
-	Log Logger
+	Log *log.Logger
 
 	httpServer        *http.Server
 	accountThumbprint string
@@ -38,10 +41,12 @@ func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) *HTTPChallengeSolver {
 
 	httpMux := http.NewServeMux()
 
+	logger := cfg.Log.Child("http_solver", nil)
+
 	httpServer := http.Server{
 		Addr:     cfg.Address,
 		Handler:  httpMux,
-		ErrorLog: NewStdErrorLogger(cfg.Log),
+		ErrorLog: logger.StdLogger(log.LevelError),
 
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       10 * time.Second,
@@ -49,7 +54,7 @@ func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) *HTTPChallengeSolver {
 
 	s := HTTPChallengeSolver{
 		Cfg: cfg,
-		Log: cfg.Log,
+		Log: logger,
 
 		challenges: make(map[string]struct{}),
 
@@ -117,12 +122,27 @@ func (s *HTTPChallengeSolver) hNotFound(w http.ResponseWriter, req *http.Request
 func (s *HTTPChallengeSolver) hChallenge(w http.ResponseWriter, req *http.Request) {
 	token := req.PathValue("token")
 
+	var statusCode int
+	reply := func(status int, format string, args ...any) {
+		statusCode = status
+		w.WriteHeader(status)
+		fmt.Fprintf(w, format+"\n", args...)
+	}
+
+	defer func() {
+		statusString := "-"
+		if statusCode > 0 {
+			statusString = strconv.Itoa(statusCode)
+		}
+
+		s.Log.Debug(2, "%s %s %s", req.Method, req.URL.String(), statusString)
+	}()
+
 	s.challengesMutex.Lock()
 	defer s.challengesMutex.Unlock()
 
 	if _, found := s.challenges[token]; !found {
-		w.WriteHeader(400)
-		fmt.Fprintf(w, "unknown token\n")
+		reply(400, "unknown token")
 		return
 	}
 
@@ -133,6 +153,5 @@ func (s *HTTPChallengeSolver) hChallenge(w http.ResponseWriter, req *http.Reques
 	// combined with the token. Because hey, who cares about these details
 	// right? So let us just do what other solvers do...
 
-	w.WriteHeader(200)
-	fmt.Fprintf(w, "%s.%s", token, s.accountThumbprint)
+	reply(200, "%s.%s", token, s.accountThumbprint)
 }

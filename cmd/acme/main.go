@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.n16f.net/acme"
+	"go.n16f.net/log"
 	"go.n16f.net/program"
 )
 
@@ -29,10 +30,13 @@ func main() {
 
 	p.ParseCommandLine()
 
+	// Logger
+	logger := log.DefaultLogger("acme")
+	logger.DebugLevel = p.DebugLevel
+
 	// Data store
 	dataStorePath := p.OptionValue("data-store")
-
-	p.Info("using data store at %q", dataStorePath)
+	logger.Info("using file system data store at %q", dataStorePath)
 
 	dataStore, err := acme.NewFileSystemDataStore(dataStorePath)
 	if err != nil {
@@ -52,10 +56,8 @@ func main() {
 		contactURI = "mailto:test@example.com"
 	}
 
-	p.Info("using ACME server %q", directoryURI)
-
 	clientCfg := acme.ClientCfg{
-		Log:          p,
+		Log:          logger,
 		DataStore:    dataStore,
 		DirectoryURI: directoryURI,
 		ContactURIs:  []string{contactURI},
