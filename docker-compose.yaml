@@ -5,7 +5,6 @@ services:
     command: >
       -config test/config/pebble-config.json
       -strict
-      -dnsserver localhost:53
     environment:
       PEBBLE_WFE_NONCEREJECT: "50"
       PEBBLE_VA_NOSLEEP: "1"
