@@ -8,7 +8,7 @@ import (
 	"go.n16f.net/log"
 )
 
-type OrderWorker struct {
+type CertificateWorker struct {
 	Log    *log.Logger
 	Client *Client
 
@@ -23,14 +23,14 @@ func newCertificateRequestError(err error) *CertificateRequestResult {
 	return &CertificateRequestResult{Error: err}
 }
 
-func (c *Client) startOrderWorker(ctx context.Context, certData *CertificateData, resultChan chan *CertificateRequestResult) {
+func (c *Client) startCertificateWorker(ctx context.Context, certData *CertificateData, resultChan chan *CertificateRequestResult) {
 	logData := log.Data{
 		"certificate": certData.Name,
 	}
 
-	log := c.Log.Child("order_worker", logData)
+	log := c.Log.Child("certificate_worker", logData)
 
-	w := OrderWorker{
+	w := CertificateWorker{
 		Log:    log,
 		Client: c,
 
@@ -43,7 +43,7 @@ func (c *Client) startOrderWorker(ctx context.Context, certData *CertificateData
 	go w.main()
 }
 
-func (w *OrderWorker) main() {
+func (w *CertificateWorker) main() {
 	defer w.Client.wg.Done()
 	defer close(w.resultChan)
 
@@ -83,16 +83,16 @@ func (w *OrderWorker) main() {
 	w.sendResult(&res)
 }
 
-func (w *OrderWorker) sendResult(res *CertificateRequestResult) {
+func (w *CertificateWorker) sendResult(res *CertificateRequestResult) {
 	w.resultChan <- res
 }
 
-func (w *OrderWorker) fatalError(err error) {
+func (w *CertificateWorker) fatalError(err error) {
 	w.Log.Error("%v", err)
 	w.sendResult(newCertificateRequestError(err))
 }
 
-func (w *OrderWorker) submitOrder() error {
+func (w *CertificateWorker) submitOrder() error {
 	now := time.Now()
 	notBefore := now
 	notAfter := now.AddDate(0, 0, w.certData.Validity)
@@ -112,7 +112,7 @@ func (w *OrderWorker) submitOrder() error {
 	return nil
 }
 
-func (w *OrderWorker) validateAuthorizations() error {
+func (w *CertificateWorker) validateAuthorizations() error {
 	order, _, err := w.Client.fetchOrder(w.ctx, w.orderURI)
 	if err != nil {
 		return fmt.Errorf("cannot fetch order: %w", err)
@@ -133,7 +133,7 @@ func (w *OrderWorker) validateAuthorizations() error {
 	return nil
 }
 
-func (w *OrderWorker) validateAuthorization(authURI string, auth *Authorization) error {
+func (w *CertificateWorker) validateAuthorization(authURI string, auth *Authorization) error {
 	w.Log.Info("validating authorization %q", auth.Identifier)
 
 	challenge := w.Client.selectAuthorizationChallenge(auth)
@@ -160,7 +160,7 @@ func (w *OrderWorker) validateAuthorization(authURI string, auth *Authorization)
 	return nil
 }
 
-func (w *OrderWorker) solveChallenge(challenge *Challenge, auth *Authorization) error {
+func (w *CertificateWorker) solveChallenge(challenge *Challenge, auth *Authorization) error {
 	w.Log.Info("solving challenge %q for authorization %q",
 		challenge.Type, auth.Identifier)
 
@@ -187,7 +187,7 @@ func (w *OrderWorker) solveChallenge(challenge *Challenge, auth *Authorization) 
 	return nil
 }
 
-func (w *OrderWorker) finalizeOrder() error {
+func (w *CertificateWorker) finalizeOrder() error {
 	w.Log.Info("finalizing order")
 
 	order, err := w.Client.waitForOrderReady(w.ctx, w.orderURI)
@@ -229,7 +229,7 @@ func (w *OrderWorker) finalizeOrder() error {
 	return nil
 }
 
-func (w *OrderWorker) downloadCertificate() error {
+func (w *CertificateWorker) downloadCertificate() error {
 	w.Log.Info("downloading certificate")
 
 	cert, err := w.Client.downloadCertificate(w.ctx, w.certificateURI)

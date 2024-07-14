@@ -28,7 +28,7 @@ func (c *Client) RequestCertificate(ctx context.Context, name string, identifier
 
 	resultChan := make(chan *CertificateRequestResult)
 
-	c.startOrderWorker(ctx, &certData, resultChan)
+	c.startCertificateWorker(ctx, &certData, resultChan)
 
 	return resultChan, nil
 }
