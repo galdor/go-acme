@@ -69,8 +69,11 @@ func (w *CertificateWorker) main() {
 			w.Log.Info("waiting until %v for renewal",
 				renewalTime.Format(time.RFC3339))
 
-			if !w.wait(time.Until(renewalTime)) {
-				return
+			now := time.Now()
+			if renewalTime.After(now) {
+				if !w.wait(renewalTime.Sub(now)) {
+					return
+				}
 			}
 		}
 
