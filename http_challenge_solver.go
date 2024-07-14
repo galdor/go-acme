@@ -84,7 +84,7 @@ func (s *HTTPChallengeSolver) Start(accountThumbprint string) error {
 		if err := s.httpServer.Serve(listener); err != nil {
 			if err != http.ErrServerClosed {
 				// TODO Retry?
-				s.Log.Error("cannot serve: %v", err)
+				s.Log.Error("cannot run HTTP server: %v", err)
 			}
 		}
 	}()

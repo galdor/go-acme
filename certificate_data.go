@@ -3,6 +3,7 @@ package acme
 import (
 	"bytes"
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -53,6 +54,21 @@ func (c *CertificateData) LeafCertificateFingerprint(hash crypto.Hash) string {
 	}
 
 	return buf.String()
+}
+
+func (c *CertificateData) TLSCertificate() *tls.Certificate {
+	certsData := make([][]byte, len(c.Certificate))
+	for i, cert := range c.Certificate {
+		certsData[i] = cert.Raw
+	}
+
+	cert := tls.Certificate{
+		PrivateKey:  c.PrivateKey,
+		Certificate: certsData,
+		Leaf:        c.LeafCertificate(),
+	}
+
+	return &cert
 }
 
 func (c *CertificateData) MarshalJSON() ([]byte, error) {

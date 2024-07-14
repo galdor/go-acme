@@ -70,7 +70,6 @@ func (w *CertificateWorker) main() {
 				renewalTime.Format(time.RFC3339))
 
 			if !w.wait(time.Until(renewalTime)) {
-				w.sendEvent(nil)
 				return
 			}
 		}
@@ -93,7 +92,6 @@ func (w *CertificateWorker) main() {
 
 				w.Log.Debug(1, "retrying in %v", retryDelay)
 				if !w.wait(retryDelay) {
-					w.sendEvent(nil)
 					return
 				}
 

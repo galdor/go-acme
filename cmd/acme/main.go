@@ -27,6 +27,7 @@ func main() {
 
 	addDirectoryCommand()
 	addCertificateCommands()
+	addDemoCommand()
 
 	p.ParseCommandLine()
 

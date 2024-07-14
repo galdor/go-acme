@@ -6,7 +6,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.0.2
 	github.com/stretchr/testify v1.8.2
 	go.n16f.net/log v0.0.0-20240707140441-2f7ab8f954a8
-	go.n16f.net/program v0.0.0-20240707135706-c2e994295489
+	go.n16f.net/program v0.0.0-20240714172550-28d5a141755e
 	golang.org/x/net v0.27.0
 )
 
