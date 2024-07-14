@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto"
 	"math"
 	"os"
 	"os/signal"
@@ -50,7 +51,7 @@ func cmdOrderCertificate(p *program.Program) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	resultChan, err := client.RequestCertificate(ctx, name, ids, validity)
+	eventChan, err := client.RequestCertificate(ctx, name, ids, validity)
 	if err != nil {
 		p.Fatal("cannot order certificate: %v", err)
 	}
@@ -59,10 +60,15 @@ func cmdOrderCertificate(p *program.Program) {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	select {
-	case res := <-resultChan:
-		if res.Error != nil {
-			p.Fatal("certificate request failed: %v", res.Error)
+	case ev := <-eventChan:
+		if ev.Error == nil {
+			certData := ev.CertificateData
+			p.Info("certificate %q (%s) ready", name,
+				certData.LeafCertificateFingerprint(crypto.MD5))
+		} else {
+			p.Fatal("cannot order certificate: %v", ev.Error)
 		}
+
 	case signo := <-sigChan:
 		p.Info("\nreceived signal %d (%v)", signo, signo)
 		client.Stop()

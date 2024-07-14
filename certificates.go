@@ -8,29 +8,46 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"golang.org/x/net/idna"
 )
 
-type CertificateRequestResult struct {
+type CertificateEvent struct {
+	// An event contains either certificate data or an error. This is why we
+	// need sum types...
+
 	CertificateData *CertificateData
 	Error           error
 }
 
-func (c *Client) RequestCertificate(ctx context.Context, name string, identifiers []Identifier, validity int) (<-chan *CertificateRequestResult, error) {
-	certData := CertificateData{
-		Name: name,
-
-		Identifiers: slices.Clone(identifiers),
-		Validity:    validity,
+func (c *Client) RequestCertificate(ctx context.Context, name string, identifiers []Identifier, validity int) (<-chan *CertificateEvent, error) {
+	certData, err := c.Cfg.DataStore.LoadCertificateData(name)
+	if err != nil && err != ErrCertificateNotFound {
+		return nil, fmt.Errorf("cannot load certificate: %w", err)
 	}
 
-	resultChan := make(chan *CertificateRequestResult)
+	var sameIds, sameValidity bool
+	if certData != nil {
+		sameIds = reflect.DeepEqual(certData.Identifiers, identifiers)
+		sameValidity = certData.Validity == validity
+	}
 
-	c.startCertificateWorker(ctx, &certData, resultChan)
+	if certData == nil || !sameIds || !sameValidity {
+		certData = &CertificateData{
+			Name: name,
 
-	return resultChan, nil
+			Identifiers: slices.Clone(identifiers),
+			Validity:    validity,
+		}
+	}
+
+	eventChan := make(chan *CertificateEvent)
+
+	c.startCertificateWorker(ctx, certData, eventChan)
+
+	return eventChan, nil
 }
 
 func (c *Client) generateCSR(ids []Identifier, privateKey crypto.Signer) ([]byte, error) {

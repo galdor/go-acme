@@ -16,14 +16,10 @@ type CertificateWorker struct {
 	certData       *CertificateData
 	orderURI       string
 	certificateURI string
-	resultChan     chan *CertificateRequestResult
+	eventChan      chan *CertificateEvent
 }
 
-func newCertificateRequestError(err error) *CertificateRequestResult {
-	return &CertificateRequestResult{Error: err}
-}
-
-func (c *Client) startCertificateWorker(ctx context.Context, certData *CertificateData, resultChan chan *CertificateRequestResult) {
+func (c *Client) startCertificateWorker(ctx context.Context, certData *CertificateData, eventChan chan *CertificateEvent) {
 	logData := log.Data{
 		"certificate": certData.Name,
 	}
@@ -34,9 +30,9 @@ func (c *Client) startCertificateWorker(ctx context.Context, certData *Certifica
 		Log:    log,
 		Client: c,
 
-		ctx:        ctx,
-		certData:   certData,
-		resultChan: resultChan,
+		ctx:       ctx,
+		certData:  certData,
+		eventChan: eventChan,
 	}
 
 	c.wg.Add(1)
@@ -45,7 +41,7 @@ func (c *Client) startCertificateWorker(ctx context.Context, certData *Certifica
 
 func (w *CertificateWorker) main() {
 	defer w.Client.wg.Done()
-	defer close(w.resultChan)
+	defer close(w.eventChan)
 
 	defer func() {
 		if v := recover(); v != nil {
@@ -55,48 +51,94 @@ func (w *CertificateWorker) main() {
 			w.Log.Error("panic: %s\n%s", msg, trace)
 			err := fmt.Errorf("panic: %s", msg)
 
-			w.sendResult(newCertificateRequestError(err))
+			w.sendEvent(&CertificateEvent{Error: err})
 		}
 	}()
 
-	if err := w.submitOrder(); err != nil {
-		w.fatalError(err)
-		return
+	// If we already have a certificate (loaded from the data store), signal
+	// its existence immediately.
+	if w.certData.ContainsCertificate() {
+		res := CertificateEvent{CertificateData: w.certData}
+		w.sendEvent(&res)
 	}
 
-	if err := w.validateAuthorizations(); err != nil {
-		w.fatalError(err)
-		return
-	}
+	for {
+		// If we already have a certificate, wait until it needs to be renewed.
+		if w.certData.ContainsCertificate() {
+			renewalTime := w.Client.Cfg.CertificateRenewalTime(w.certData)
+			w.Log.Info("waiting until %v for renewal",
+				renewalTime.Format(time.RFC3339))
 
-	if err := w.finalizeOrder(); err != nil {
-		w.fatalError(err)
-		return
-	}
+			if !w.wait(time.Until(renewalTime)) {
+				w.sendEvent(nil)
+				return
+			}
+		}
 
-	if err := w.downloadCertificate(); err != nil {
-		w.fatalError(err)
-		return
-	}
+		// Order a new certificate, retrying regularly if something goes wrong.
+		w.certData.Certificate = nil
+		w.certData.CertificateData = ""
 
-	res := CertificateRequestResult{CertificateData: w.certData}
-	w.sendResult(&res)
+		retryDelay := time.Second
+	retryLoop:
+		for {
+			if err := w.orderCertificate(); err != nil {
+				// If we cannot obtain a certificate and we do not have one,
+				// stop right now: if we are trying to start a server, we cannot
+				// do anything until we have this first certificate.
+				if !w.certData.ContainsCertificate() {
+					w.sendError(err)
+					return
+				}
+
+				w.Log.Debug(1, "retrying in %v", retryDelay)
+				if !w.wait(retryDelay) {
+					w.sendEvent(nil)
+					return
+				}
+
+				retryDelay = min(retryDelay*2, 60*time.Second)
+				continue retryLoop
+			}
+
+			break
+		}
+
+		res := CertificateEvent{CertificateData: w.certData}
+		w.sendEvent(&res)
+	}
 }
 
-func (w *CertificateWorker) sendResult(res *CertificateRequestResult) {
+func (w *CertificateWorker) wait(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+
 	select {
-	case w.resultChan <- res:
+	case <-t.C:
+		return true
+	case <-w.Client.stopChan:
+		return false
+	case <-w.ctx.Done():
+		return false
+	}
+}
+
+func (w *CertificateWorker) sendEvent(res *CertificateEvent) {
+	select {
+	case w.eventChan <- res:
 	case <-w.Client.stopChan:
 	case <-w.ctx.Done():
 	}
 }
 
-func (w *CertificateWorker) fatalError(err error) {
+func (w *CertificateWorker) sendError(err error) {
 	w.Log.Error("%v", err)
-	w.sendResult(newCertificateRequestError(err))
+	w.sendEvent(&CertificateEvent{Error: err})
 }
 
-func (w *CertificateWorker) submitOrder() error {
+func (w *CertificateWorker) orderCertificate() error {
+	w.Log.Info("submitting order")
+
 	now := time.Now()
 	notBefore := now
 	notAfter := now.AddDate(0, 0, w.certData.Validity)
@@ -113,7 +155,10 @@ func (w *CertificateWorker) submitOrder() error {
 	}
 
 	w.orderURI = orderURI
-	return nil
+
+	w.Log.Debug(1, "created order %q", w.orderURI)
+
+	return w.validateAuthorizations()
 }
 
 func (w *CertificateWorker) validateAuthorizations() error {
@@ -134,7 +179,7 @@ func (w *CertificateWorker) validateAuthorizations() error {
 		}
 	}
 
-	return nil
+	return w.finalizeOrder()
 }
 
 func (w *CertificateWorker) validateAuthorization(authURI string, auth *Authorization) error {
@@ -159,7 +204,7 @@ func (w *CertificateWorker) validateAuthorization(authURI string, auth *Authoriz
 		return err
 	}
 
-	w.Log.Info("authorization %q ready", auth.Identifier)
+	w.Log.Debug(1, "authorization %q ready", auth.Identifier)
 
 	return nil
 }
@@ -186,7 +231,7 @@ func (w *CertificateWorker) solveChallenge(challenge *Challenge, auth *Authoriza
 		return err
 	}
 
-	w.Log.Info("challenge %q solved", challenge.Type)
+	w.Log.Debug(1, "challenge %q solved", challenge.Type)
 
 	return nil
 }
@@ -199,15 +244,18 @@ func (w *CertificateWorker) finalizeOrder() error {
 		return err
 	}
 
-	w.Log.Info("order ready")
+	w.Log.Debug(1, "order ready")
 
-	privateKey, err := w.Client.Cfg.GenerateCertificatePrivateKey()
-	if err != nil {
-		return fmt.Errorf("cannot generate private key: %w", err)
+	if w.certData.PrivateKey == nil {
+		privateKey, err := w.Client.Cfg.GenerateCertificatePrivateKey()
+		if err != nil {
+			return fmt.Errorf("cannot generate private key: %w", err)
+		}
+		w.certData.PrivateKey = privateKey
 	}
-	w.certData.PrivateKey = privateKey
 
-	csr, err := w.Client.generateCSR(w.certData.Identifiers, privateKey)
+	csr, err := w.Client.generateCSR(w.certData.Identifiers,
+		w.certData.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("cannot generate certificate request: %w", err)
 	}
@@ -217,12 +265,14 @@ func (w *CertificateWorker) finalizeOrder() error {
 		return err
 	}
 
-	w.Log.Info("order finalized")
+	w.Log.Debug(1, "order finalized")
 
 	order, err = w.Client.waitForOrderValid(w.ctx, w.orderURI)
 	if err != nil {
 		return err
 	}
+
+	w.Log.Debug(1, "order valid")
 
 	if order.Certificate == nil {
 		return fmt.Errorf("valid order does not contain a certificate URI")
@@ -230,7 +280,7 @@ func (w *CertificateWorker) finalizeOrder() error {
 
 	w.certificateURI = *order.Certificate
 
-	return nil
+	return w.downloadCertificate()
 }
 
 func (w *CertificateWorker) downloadCertificate() error {

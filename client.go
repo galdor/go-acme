@@ -15,6 +15,7 @@ import (
 
 type AccountPrivateKeyGenerationFunc func() (crypto.Signer, error)
 type CertificatePrivateKeyGenerationFunc func() (crypto.Signer, error)
+type CertificateRenewalTimeFunc func(*CertificateData) time.Time
 
 type ClientCfg struct {
 	Log                           *log.Logger                         `json:"-"`
@@ -22,6 +23,7 @@ type ClientCfg struct {
 	DataStore                     DataStore                           `json:"-"`
 	GenerateAccountPrivateKey     AccountPrivateKeyGenerationFunc     `json:"-"`
 	GenerateCertificatePrivateKey CertificatePrivateKeyGenerationFunc `json:"-"`
+	CertificateRenewalTime        CertificateRenewalTimeFunc          `json:"-"`
 
 	UserAgent    string   `json:"user_agent"`
 	DirectoryURI string   `json:"directory_uri"`
@@ -66,6 +68,10 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 
 	if cfg.GenerateCertificatePrivateKey == nil {
 		cfg.GenerateCertificatePrivateKey = GenerateECDSAP256PrivateKey
+	}
+
+	if cfg.CertificateRenewalTime == nil {
+		cfg.CertificateRenewalTime = CertificateRenewalTime
 	}
 
 	if cfg.UserAgent == "" {

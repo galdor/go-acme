@@ -20,15 +20,15 @@ func TestCertificateCreation(t *testing.T) {
 			ids := []Identifier{{IdentifierTypeDNS, "localhost"}}
 			validity := 1
 
-			resultChan, err := c.RequestCertificate(ctx, name, ids, validity)
+			eventChan, err := c.RequestCertificate(ctx, name, ids, validity)
 			require.NoError(err)
 
-			result := <-resultChan
+			ev := <-eventChan
 
-			require.NotNil(result)
-			require.NoError(result.Error)
+			require.NotNil(ev)
+			require.NoError(ev.Error)
 
-			data := result.CertificateData
+			data := ev.CertificateData
 
 			assert.Equal(name, data.Name)
 			assert.Equal(ids, data.Identifiers)

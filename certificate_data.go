@@ -1,10 +1,14 @@
 package acme
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type CertificateData struct {
@@ -17,6 +21,38 @@ type CertificateData struct {
 	PrivateKeyData  []byte              `json:"private_key"`
 	Certificate     []*x509.Certificate `json:"-"`
 	CertificateData string              `json:"certificate"`
+}
+
+func (c *CertificateData) LeafCertificate() *x509.Certificate {
+	if len(c.Certificate) == 0 {
+		return nil
+	}
+
+	return c.Certificate[0]
+}
+
+func (c *CertificateData) ContainsCertificate() bool {
+	return c.PrivateKey != nil && len(c.Certificate) > 0
+}
+
+func (c *CertificateData) LeafCertificateFingerprint(hash crypto.Hash) string {
+	cert := c.LeafCertificate()
+
+	h := hash.New()
+	h.Write(cert.Raw)
+	checksum := h.Sum(nil)
+
+	var buf bytes.Buffer
+	for i, b := range checksum {
+		if i > 0 {
+			buf.WriteByte(':')
+		}
+
+		s := strconv.FormatInt(int64(b), 16)
+		buf.WriteString(strings.ToUpper(s))
+	}
+
+	return buf.String()
 }
 
 func (c *CertificateData) MarshalJSON() ([]byte, error) {
@@ -65,4 +101,15 @@ func (c *CertificateData) UnmarshalJSON(data []byte) error {
 
 	*c = CertificateData(c2)
 	return nil
+}
+
+func CertificateRenewalTime(data *CertificateData) time.Time {
+	cert := data.LeafCertificate()
+	expirationTime := cert.NotAfter
+
+	if data.Validity > 1 {
+		return expirationTime.AddDate(0, 0, max(data.Validity/2, 1))
+	} else {
+		return expirationTime.Add(-12 * time.Hour)
+	}
 }
