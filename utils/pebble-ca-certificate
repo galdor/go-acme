@@ -1,0 +1,5 @@
+#!/bin/sh
+
+set -eu
+
+curl -k -s https://localhost:15000/roots/0
