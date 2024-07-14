@@ -84,7 +84,11 @@ func (w *CertificateWorker) main() {
 }
 
 func (w *CertificateWorker) sendResult(res *CertificateRequestResult) {
-	w.resultChan <- res
+	select {
+	case w.resultChan <- res:
+	case <-w.Client.stopChan:
+	case <-w.ctx.Done():
+	}
 }
 
 func (w *CertificateWorker) fatalError(err error) {
