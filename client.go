@@ -48,6 +48,9 @@ type Client struct {
 	certificates      map[string]*CertificateData
 	certificatesMutex sync.RWMutex
 
+	certificateWaiters      map[string][]chan *CertificateData
+	certificateWaitersMutex sync.Mutex
+
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 }
@@ -89,6 +92,8 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 		dataStore:  cfg.DataStore,
 
 		certificates: make(map[string]*CertificateData),
+
+		certificateWaiters: make(map[string][]chan *CertificateData),
 
 		stopChan: make(chan struct{}),
 	}

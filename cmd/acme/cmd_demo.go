@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"go.n16f.net/acme"
@@ -42,20 +41,10 @@ func cmdDemo(p *program.Program) {
 		p.Fatal("cannot order certificate: %v", err)
 	}
 
-	var readyWg sync.WaitGroup
-	readyWg.Add(1)
-
 	go func() {
-		hasCertificate := false
-
 		for ev := range eventChan {
 			if ev.Error != nil {
 				p.Fatal("cannot order certificate: %v", ev.Error)
-			}
-
-			if !hasCertificate {
-				hasCertificate = true
-				readyWg.Done()
 			}
 		}
 	}()
@@ -81,7 +70,7 @@ func cmdDemo(p *program.Program) {
 	}
 
 	// Wait for a certificate and start the HTTP server
-	readyWg.Wait()
+	client.WaitForCertificate(ctx, "demo")
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
