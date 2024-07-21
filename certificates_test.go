@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCertificateCreation(t *testing.T) {
+func TestRequestCertificate(t *testing.T) {
 	require := require.New(t)
 	assert := assert.New(t)
 
@@ -35,5 +35,55 @@ func TestCertificateCreation(t *testing.T) {
 			assert.Equal(validity, data.Validity)
 			assert.Greater(len(data.Certificate), 0)
 			assert.NotNil(data.PrivateKey)
+		})
+}
+
+func TestWaitForCertificate(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+
+	dataStorePath := t.TempDir()
+
+	name := "test"
+	ids := []Identifier{DNSIdentifier("localhost")}
+	validity := 1
+
+	checkEvents := func(eventChan <-chan *CertificateEvent) {
+		for ev := range eventChan {
+			require.NotNil(ev)
+			require.NoError(ev.Error)
+		}
+	}
+
+	// The first time the certificate is not in the data store.
+	withTestClientWithDataStorePath(t, dataStorePath,
+		func(c *Client) {
+			ctx := context.Background()
+
+			eventChan, err := c.RequestCertificate(ctx, name, ids, validity)
+			require.NoError(err)
+
+			go checkEvents(eventChan)
+
+			data := c.WaitForCertificate(ctx, "test")
+			require.NotNil(data)
+
+			assert.Equal(name, data.Name)
+		})
+
+	// The second time the certificate is already in the data store.
+	withTestClientWithDataStorePath(t, dataStorePath,
+		func(c *Client) {
+			ctx := context.Background()
+
+			eventChan, err := c.RequestCertificate(ctx, name, ids, validity)
+			require.NoError(err)
+
+			go checkEvents(eventChan)
+
+			data := c.WaitForCertificate(ctx, "test")
+			require.NotNil(data)
+
+			assert.Equal(name, data.Name)
 		})
 }
