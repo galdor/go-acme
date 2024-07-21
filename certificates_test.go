@@ -17,7 +17,7 @@ func TestCertificateCreation(t *testing.T) {
 			ctx := context.Background()
 
 			name := "test"
-			ids := []Identifier{{IdentifierTypeDNS, "localhost"}}
+			ids := []Identifier{DNSIdentifier("localhost")}
 			validity := 1
 
 			eventChan, err := c.RequestCertificate(ctx, name, ids, validity)

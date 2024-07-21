@@ -36,7 +36,7 @@ func cmdDemo(p *program.Program) {
 	// Request a certificate
 	ctx := context.Background()
 
-	ids := []acme.Identifier{{Type: acme.IdentifierTypeDNS, Value: hostname}}
+	ids := []acme.Identifier{acme.DNSIdentifier(hostname)}
 
 	eventChan, err := client.RequestCertificate(ctx, "demo", ids, 1)
 	if err != nil {

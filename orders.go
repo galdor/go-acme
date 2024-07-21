@@ -31,6 +31,10 @@ type Identifier struct {
 	Value string         `json:"value"`
 }
 
+func DNSIdentifier(value string) Identifier {
+	return Identifier{Type: IdentifierTypeDNS, Value: value}
+}
+
 func (id Identifier) String() string {
 	return fmt.Sprintf("%s:%s", id.Type, id.Value)
 }
