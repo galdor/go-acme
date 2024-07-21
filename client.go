@@ -37,13 +37,16 @@ type Client struct {
 	Log       *log.Logger
 	Directory *Directory
 
-	nonces      []string
-	noncesMutex sync.Mutex
-
 	httpClient          *http.Client
 	httpChallengeSolver *HTTPChallengeSolver
 	dataStore           DataStore
 	accountData         *AccountData
+
+	nonces      []string
+	noncesMutex sync.Mutex
+
+	certificates      map[string]*CertificateData
+	certificatesMutex sync.RWMutex
 
 	stopChan chan struct{}
 	wg       sync.WaitGroup
@@ -84,6 +87,8 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 
 		httpClient: cfg.HTTPClient,
 		dataStore:  cfg.DataStore,
+
+		certificates: make(map[string]*CertificateData),
 
 		stopChan: make(chan struct{}),
 	}

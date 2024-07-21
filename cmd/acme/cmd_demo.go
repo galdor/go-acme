@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"sync/atomic"
 	"syscall"
 
 	"go.n16f.net/acme"
@@ -43,31 +42,27 @@ func cmdDemo(p *program.Program) {
 		p.Fatal("cannot order certificate: %v", err)
 	}
 
-	var certValue atomic.Value // *acme.CertificateData
-
 	var readyWg sync.WaitGroup
 	readyWg.Add(1)
 
 	go func() {
+		hasCertificate := false
+
 		for ev := range eventChan {
 			if ev.Error != nil {
 				p.Fatal("cannot order certificate: %v", ev.Error)
 			}
 
-			if certValue.Swap(ev.CertificateData) == nil {
+			if !hasCertificate {
+				hasCertificate = true
 				readyWg.Done()
 			}
 		}
 	}()
 
-	getCertificate := func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		certData := certValue.Load().(*acme.CertificateData)
-		return certData.TLSCertificate(), nil
-	}
-
 	// Create an HTTP server
 	tlsCfg := tls.Config{
-		GetCertificate: getCertificate,
+		GetCertificate: client.GetTLSCertificateFunc("demo"),
 	}
 
 	mux := http.NewServeMux()

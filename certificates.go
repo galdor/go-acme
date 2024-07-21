@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -14,12 +15,43 @@ import (
 	"golang.org/x/net/idna"
 )
 
+// See the GetCertificate field of tls.Config.
+type GetTLSCertificateFunc func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+
 type CertificateEvent struct {
 	// An event contains either certificate data or an error. This is why we
 	// need sum types...
 
 	CertificateData *CertificateData
 	Error           error
+}
+
+func (c *Client) GetTLSCertificateFunc(name string) GetTLSCertificateFunc {
+	return func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		certData := c.Certificate(name)
+		if certData == nil {
+			return nil, fmt.Errorf("no certificate available")
+		}
+
+		return certData.TLSCertificate(), nil
+	}
+}
+
+func (c *Client) Certificate(name string) *CertificateData {
+	c.certificatesMutex.RLock()
+	certData := c.certificates[name]
+	c.certificatesMutex.RUnlock()
+
+	return certData
+}
+
+func (c *Client) storeCertificate(certData *CertificateData) {
+	name := certData.Name
+
+	c.certificatesMutex.Lock()
+	defer c.certificatesMutex.Unlock()
+
+	c.certificates[name] = certData
 }
 
 func (c *Client) RequestCertificate(ctx context.Context, name string, identifiers []Identifier, validity int) (<-chan *CertificateEvent, error) {

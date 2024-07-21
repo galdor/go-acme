@@ -55,33 +55,30 @@ func (w *CertificateWorker) main() {
 		}
 	}()
 
-	// If we already have a certificate (loaded from the data store), signal
-	// its existence immediately.
+	renewalTime := time.Now()
+
 	if w.certData.ContainsCertificate() {
-		res := CertificateEvent{CertificateData: w.certData}
-		w.sendEvent(&res)
+		renewalTime = w.Client.Cfg.CertificateRenewalTime(w.certData)
+
+		// If we already have a certificate (loaded from the data store), signal
+		// its existence immediately.
+		w.onCertificateDataReady()
 	}
 
 	for {
-		// If we already have a certificate, wait until it needs to be renewed.
-		if w.certData.ContainsCertificate() {
-			renewalTime := w.Client.Cfg.CertificateRenewalTime(w.certData)
+		now := time.Now()
+		if renewalTime.After(now) {
 			w.Log.Info("waiting until %v for renewal",
 				renewalTime.Format(time.RFC3339))
 
-			now := time.Now()
-			if renewalTime.After(now) {
-				if !w.wait(renewalTime.Sub(now)) {
-					return
-				}
+			if !w.wait(renewalTime.Sub(now)) {
+				return
 			}
 		}
 
 		// Order a new certificate, retrying regularly if something goes wrong.
-		w.certData.Certificate = nil
-		w.certData.CertificateData = ""
-
 		retryDelay := time.Second
+
 	retryLoop:
 		for {
 			if err := w.orderCertificate(); err != nil {
@@ -105,8 +102,9 @@ func (w *CertificateWorker) main() {
 			break
 		}
 
-		res := CertificateEvent{CertificateData: w.certData}
-		w.sendEvent(&res)
+		renewalTime = w.Client.Cfg.CertificateRenewalTime(w.certData)
+
+		w.onCertificateDataReady()
 	}
 }
 
@@ -135,6 +133,19 @@ func (w *CertificateWorker) sendEvent(res *CertificateEvent) {
 func (w *CertificateWorker) sendError(err error) {
 	w.Log.Error("%v", err)
 	w.sendEvent(&CertificateEvent{Error: err})
+}
+
+func (w *CertificateWorker) onCertificateDataReady() {
+	// Create the final certificate data structure, store in the client and send
+	// it as an event.
+	//
+	// Remember that once we have called extractCopy(), w.certData does not
+	// contain a certificate chain anymore.
+
+	certData := w.certData.extractCopy()
+
+	w.Client.storeCertificate(certData)
+	w.sendEvent(&CertificateEvent{CertificateData: certData})
 }
 
 func (w *CertificateWorker) orderCertificate() error {

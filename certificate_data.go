@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -117,6 +118,33 @@ func (c *CertificateData) UnmarshalJSON(data []byte) error {
 
 	*c = CertificateData(c2)
 	return nil
+}
+
+func (c *CertificateData) extractCopy() *CertificateData {
+	// This function is very specialized: it is used by a certificate worker to
+	// create a copy of its internal CertificateData structure that will be used
+	// by consumers of the library.
+	//
+	// Obviously we do not want any shared access to the same structure. The
+	// private key is generated once and never modified afterward, so we can
+	// include it in the copy. The certificate chain is included in the copy and
+	// cleared in the original since the worker will not need it again (it will
+	// obtain a new chain on renewal).
+
+	c2 := CertificateData{
+		Name: c.Name,
+
+		Identifiers: slices.Clone(c.Identifiers),
+		Validity:    c.Validity,
+
+		PrivateKey:  c.PrivateKey,
+		Certificate: c.Certificate,
+	}
+
+	c.Certificate = nil
+	c.CertificateData = ""
+
+	return &c2
 }
 
 func CertificateRenewalTime(data *CertificateData) time.Time {
