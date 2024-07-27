@@ -86,14 +86,14 @@ func (c *Client) setupChallenge(ctx context.Context, challenge *Challenge) error
 	return err
 }
 
-func (c *Client) cleanupChallenge(ctx context.Context, challenge *Challenge) error {
+func (c *Client) teardownChallenge(ctx context.Context, challenge *Challenge) error {
 	var err error
 
 	switch challenge.Type {
 	case ChallengeTypeHTTP01:
-		err = c.cleanupChallengeHTTP01(ctx, challenge)
+		err = c.teardownChallengeHTTP01(ctx, challenge)
 	case ChallengeTypeDNS01:
-		err = c.cleanupChallengeDNS01(ctx, challenge)
+		err = c.teardownChallengeDNS01(ctx, challenge)
 	default:
 		err = fmt.Errorf("unknown challenge type %q", challenge.Type)
 	}
@@ -107,7 +107,7 @@ func (c *Client) setupChallengeHTTP01(ctx context.Context, challenge *Challenge)
 	return nil
 }
 
-func (c *Client) cleanupChallengeHTTP01(ctx context.Context, challenge *Challenge) error {
+func (c *Client) teardownChallengeHTTP01(ctx context.Context, challenge *Challenge) error {
 	data := challenge.Data.(*ChallengeDataHTTP01)
 	c.httpChallengeSolver.discardToken(data.Token)
 	return nil
@@ -118,7 +118,7 @@ func (c *Client) setupChallengeDNS01(ctx context.Context, challenge *Challenge) 
 	return errors.New("not implemented yet")
 }
 
-func (c *Client) cleanupChallengeDNS01(ctx context.Context, challenge *Challenge) error {
+func (c *Client) teardownChallengeDNS01(ctx context.Context, challenge *Challenge) error {
 	// TODO Solve DNS-01 challenges
 	return errors.New("not implemented yet")
 }

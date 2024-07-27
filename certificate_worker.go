@@ -230,8 +230,8 @@ func (w *CertificateWorker) solveChallenge(challenge *Challenge, auth *Authoriza
 	}
 
 	defer func() {
-		if err := w.Client.cleanupChallenge(w.ctx, challenge); err != nil {
-			w.Log.Error("cannot cleanup challenge: %v", err)
+		if err := w.Client.teardownChallenge(w.ctx, challenge); err != nil {
+			w.Log.Error("cannot teardown challenge: %v", err)
 		}
 	}()
 
