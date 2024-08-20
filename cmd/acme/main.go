@@ -69,7 +69,7 @@ func main() {
 			acme.NewHTTPClient(acme.PebbleCACertificatePool())
 
 		clientCfg.HTTPChallengeSolver = &acme.HTTPChallengeSolverCfg{
-			Address: ":5002",
+			Address: acme.PebbleHTTPChallengeSolverAddress,
 		}
 	}
 

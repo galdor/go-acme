@@ -17,7 +17,9 @@ func withTestClientWithDataStorePath(t *testing.T, dataStorePath string, fn func
 
 	httpClient := NewHTTPClient(PebbleCACertificatePool())
 
-	httpChallengeSolver := HTTPChallengeSolverCfg{Address: ":5002"}
+	httpChallengeSolver := HTTPChallengeSolverCfg{
+		Address: PebbleHTTPChallengeSolverAddress,
+	}
 
 	clientCfg := ClientCfg{
 		HTTPClient:          httpClient,

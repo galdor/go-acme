@@ -12,7 +12,8 @@ import (
 // changed in 7+ years.
 
 const (
-	PebbleDirectoryURI = "https://localhost:14000/dir"
+	PebbleDirectoryURI               = "https://localhost:14000/dir"
+	PebbleHTTPChallengeSolverAddress = ":5002"
 )
 
 //go:embed data/pebble-ca.crt
