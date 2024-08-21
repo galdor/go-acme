@@ -24,7 +24,7 @@ func (c *Client) startCertificateWorker(ctx context.Context, certData *Certifica
 		"certificate": certData.Name,
 	}
 
-	log := c.Log.Child("certificate_worker", logData)
+	log := c.Log.Child("cert_worker", logData)
 
 	w := CertificateWorker{
 		Log:    log,
