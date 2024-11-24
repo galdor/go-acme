@@ -103,7 +103,13 @@ func NewClient(cfg ClientCfg) (*Client, error) {
 			sCfg.Log = cfg.Log
 		}
 
-		c.httpChallengeSolver = NewHTTPChallengeSolver(*sCfg)
+		solver, err := NewHTTPChallengeSolver(*sCfg)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create HTTP challenge solver: %w",
+				err)
+		}
+
+		c.httpChallengeSolver = solver
 	}
 
 	return &c, nil

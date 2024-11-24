@@ -1,11 +1,16 @@
 package acme
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"maps"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +21,8 @@ type HTTPChallengeSolverCfg struct {
 	Log               *log.Logger `json:"-"`
 	AccountThumbprint string      `json:"-"`
 
-	Address string `json:"address"`
+	Address     string `json:"address"`
+	UpstreamURI string `json:"upstream_uri,omitempty"`
 }
 
 type HTTPChallengeSolver struct {
@@ -28,10 +34,15 @@ type HTTPChallengeSolver struct {
 	challenges        map[string]struct{}
 	challengesMutex   sync.Mutex
 
+	upstreamURI    *url.URL
+	upstreamConn   net.Conn
+	upstreamReader *bufio.Reader
+	upstreamMutex  sync.Mutex
+
 	wg sync.WaitGroup
 }
 
-func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) *HTTPChallengeSolver {
+func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) (*HTTPChallengeSolver, error) {
 	if cfg.Address == "" {
 		// Usually we default to localhost for default server addresses, but the
 		// very point of the HTTP challenge solver is to be available from an
@@ -39,36 +50,58 @@ func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) *HTTPChallengeSolver {
 		cfg.Address = "0.0.0.0:80"
 	}
 
-	httpMux := http.NewServeMux()
-
 	logger := cfg.Log.Child("http_solver", nil)
-
-	httpServer := http.Server{
-		Addr:     cfg.Address,
-		Handler:  httpMux,
-		ErrorLog: logger.StdLogger(log.LevelError),
-
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       10 * time.Second,
-	}
 
 	s := HTTPChallengeSolver{
 		Cfg: cfg,
 		Log: logger,
 
 		challenges: make(map[string]struct{}),
-
-		httpServer: &httpServer,
 	}
 
-	httpMux.HandleFunc("/", s.hNotFound)
-	httpMux.HandleFunc("/.well-known/acme-challenge/{token}", s.hChallenge)
+	s.httpServer = &http.Server{
+		Addr:     cfg.Address,
+		Handler:  &s,
+		ErrorLog: logger.StdLogger(log.LevelError),
 
-	return &s
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       10 * time.Second,
+	}
+
+	if cfg.UpstreamURI != "" {
+		uri, err := url.Parse(cfg.UpstreamURI)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse upstream URI: %w", err)
+		}
+
+		if uri.Scheme == "" {
+			uri.Scheme = "http"
+		}
+		if uri.Host == "" {
+			uri.Host = "localhost"
+		}
+		uri.Path = ""
+		uri.Fragment = ""
+
+		s.upstreamURI = uri
+	}
+
+	return &s, nil
 }
 
 func (s *HTTPChallengeSolver) Start(accountThumbprint string) error {
 	s.accountThumbprint = accountThumbprint
+
+	if s.upstreamURI != nil {
+		s.Log.Info("forwarding non-ACME HTTP requests to %q", s.Cfg.UpstreamURI)
+
+		// We do not really have to connect to the upstream server until the
+		// first request, but doing so helps catching configuration errors
+		// early.
+		if err := s.ensureUpstreamConnection(); err != nil {
+			return err
+		}
+	}
 
 	listener, err := net.Listen("tcp", s.Cfg.Address)
 	if err != nil {
@@ -100,6 +133,110 @@ func (s *HTTPChallengeSolver) Stop() {
 	}
 
 	s.wg.Wait()
+
+	s.upstreamMutex.Lock()
+	if s.upstreamConn != nil {
+		s.upstreamConn.Close()
+		s.upstreamConn = nil
+	}
+	s.upstreamMutex.Unlock()
+}
+
+func (s *HTTPChallengeSolver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	token, found := strings.CutPrefix(req.URL.Path,
+		"/.well-known/acme-challenge/")
+	if found {
+		s.hChallenge(w, req, token)
+		return
+	}
+
+	if s.upstreamURI == nil {
+		w.WriteHeader(404)
+		return
+	}
+
+	s.upstreamMutex.Lock()
+	defer s.upstreamMutex.Unlock()
+
+	if err := s.ensureUpstreamConnection(); err != nil {
+		s.Log.Error("%v", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	res, err := s.sendUpstreamRequest(req)
+	if err != nil {
+		s.Log.Error("cannot forward request to upstream server: %v", err)
+		s.upstreamConn.Close()
+		s.upstreamConn = nil
+		w.WriteHeader(500)
+		return
+	}
+	defer res.Body.Close()
+
+	maps.Copy(w.Header(), res.Header)
+	w.WriteHeader(res.StatusCode)
+
+	if _, err := io.Copy(w, res.Body); err != nil {
+		s.Log.Error("cannot copy response body: %v", err)
+		s.upstreamConn.Close()
+		s.upstreamConn = nil
+		return
+	}
+}
+
+func (s *HTTPChallengeSolver) sendUpstreamRequest(req *http.Request) (*http.Response, error) {
+	req = req.Clone(context.Background())
+
+	// In a regular reverse proxy we would rewrite the scheme and host of the
+	// request to match the URI of the upstream server. However here the
+	// upstream server will be expecting requests from the outside world, not
+	// from localhost. The very point of this reverse proxy is to be
+	// transparent.
+	//
+	// However we still have to remove hop-by-hop header fields (RFC 2616
+	// 13.5.1) because they could make the upstream server behave incorrectly.
+	var rfc2616Fields = []string{
+		"Connection",
+		"Keep-Alive",
+		"Proxy-Authenticate",
+		"Proxy-Authorization",
+		"TE",
+		"Trailers",
+		"Transfer-Encoding",
+		"Upgrade",
+	}
+
+	for _, name := range rfc2616Fields {
+		req.Header.Del(name)
+	}
+
+	if err := req.Write(s.upstreamConn); err != nil {
+		return nil, fmt.Errorf("cannot write request: %w", err)
+	}
+
+	res, err := http.ReadResponse(s.upstreamReader, req)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read response: %w", err)
+	}
+
+	return res, nil
+}
+
+func (s *HTTPChallengeSolver) ensureUpstreamConnection() error {
+	if s.upstreamConn != nil {
+		return nil
+	}
+
+	conn, err := net.Dial("tcp", s.upstreamURI.Host)
+	if err != nil {
+		return fmt.Errorf("cannot connect to %q: %w", s.upstreamURI.Host, err)
+	}
+
+	s.upstreamConn = conn
+	s.upstreamReader = bufio.NewReader(conn)
+
+	return nil
 }
 
 func (s *HTTPChallengeSolver) addToken(token string) {
@@ -114,13 +251,7 @@ func (s *HTTPChallengeSolver) discardToken(token string) {
 	s.challengesMutex.Unlock()
 }
 
-func (s *HTTPChallengeSolver) hNotFound(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(404)
-}
-
-func (s *HTTPChallengeSolver) hChallenge(w http.ResponseWriter, req *http.Request) {
-	token := req.PathValue("token")
-
+func (s *HTTPChallengeSolver) hChallenge(w http.ResponseWriter, req *http.Request, token string) {
 	var statusCode int
 	reply := func(status int, format string, args ...any) {
 		statusCode = status
