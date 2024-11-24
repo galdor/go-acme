@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 )
@@ -77,7 +76,7 @@ func (s *FileSystemDataStore) certificatePath(name string) string {
 }
 
 func (s *FileSystemDataStore) loadFile(filePath string) ([]byte, error) {
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %q: %w", filePath, err)
 	}
@@ -86,7 +85,7 @@ func (s *FileSystemDataStore) loadFile(filePath string) ([]byte, error) {
 }
 
 func (s *FileSystemDataStore) loadJSONFile(filePath string, dest any) error {
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("cannot read %q: %w", filePath, err)
 	}
