@@ -106,7 +106,7 @@ func (s *FileSystemDataStore) storeFile(filePath string, data []byte) error {
 		return fmt.Errorf("cannot create directory %q: %w", dirPath, err)
 	}
 
-	if err := ioutil.WriteFile(tmpPath, data, 0600); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("cannot write %q: %w", tmpPath, err)
 	}
 
