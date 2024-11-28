@@ -92,16 +92,7 @@ func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) (*HTTPChallengeSolver, e
 func (s *HTTPChallengeSolver) Start(accountThumbprint string) error {
 	s.accountThumbprint = accountThumbprint
 
-	if s.upstreamURI != nil {
-		s.Log.Info("forwarding non-ACME HTTP requests to %q", s.Cfg.UpstreamURI)
-
-		// We do not really have to connect to the upstream server until the
-		// first request, but doing so helps catching configuration errors
-		// early.
-		if err := s.ensureUpstreamConnection(); err != nil {
-			return err
-		}
-	}
+	s.Log.Info("forwarding non-ACME HTTP requests to %q", s.Cfg.UpstreamURI)
 
 	listener, err := net.Listen("tcp", s.Cfg.Address)
 	if err != nil {
