@@ -17,12 +17,16 @@ type CertificateData struct {
 	Name string `json:"name"`
 
 	Identifiers []Identifier `json:"identifiers"`
-	Validity    int          `json:"validity"` // days
+	Validity    int          `json:"validity,omitempty"` // days [1]
 
 	PrivateKey      crypto.Signer       `json:"-"`
 	PrivateKeyData  []byte              `json:"private_key"`
 	Certificate     []*x509.Certificate `json:"-"`
 	CertificateData string              `json:"certificate"`
+
+	// [1] The validity period is optional because even though ACME and Pebble
+	// support it, Let's Encrypt will reject all orders setting NotBefore or
+	// NotAfter.
 }
 
 func (c *CertificateData) LeafCertificate() *x509.Certificate {
@@ -149,11 +153,18 @@ func (c *CertificateData) extractCopy() *CertificateData {
 
 func CertificateRenewalTime(data *CertificateData) time.Time {
 	cert := data.LeafCertificate()
-	expirationTime := cert.NotAfter
+	now := time.Now()
 
-	if data.Validity > 1 {
-		return expirationTime.AddDate(0, 0, max(data.Validity/2, 1))
-	} else {
-		return expirationTime.Add(-12 * time.Hour)
+	// Renew right now if the certificates expires in less than 12h
+	validityLeft := cert.NotAfter.Sub(now)
+	if validityLeft.Hours() < 12.0 {
+		return now
 	}
+
+	// We want to renew regularly even if the certificate is valid for a very
+	// long time because it helps catching operational issues. But we also do
+	// not want to spam the ACME provider. Half of the validity period is a fair
+	// compromise.
+	halfValidity := cert.NotAfter.Sub(cert.NotBefore) / 2.0
+	return cert.NotBefore.Add(halfValidity)
 }

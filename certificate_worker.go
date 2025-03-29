@@ -151,14 +151,18 @@ func (w *CertificateWorker) onCertificateDataReady() {
 func (w *CertificateWorker) orderCertificate() error {
 	w.Log.Info("submitting order")
 
-	now := time.Now()
-	notBefore := now
-	notAfter := now.AddDate(0, 0, w.certData.Validity)
-
 	newOrder := NewOrder{
 		Identifiers: w.certData.Identifiers,
-		NotBefore:   &notBefore,
-		NotAfter:    &notAfter,
+	}
+
+	if w.certData.Validity != 0 {
+		now := time.Now()
+
+		notBefore := now
+		newOrder.NotBefore = &notBefore
+
+		notAfter := now.AddDate(0, 0, w.certData.Validity)
+		newOrder.NotAfter = &notAfter
 	}
 
 	orderURI, err := w.Client.submitOrder(w.ctx, &newOrder)
