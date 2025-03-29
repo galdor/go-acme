@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	stdlog "log"
 	"net"
 	"net/http"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"syscall"
 
 	"go.n16f.net/acme"
-	"go.n16f.net/log"
 	"go.n16f.net/program"
 )
 
@@ -60,13 +60,11 @@ func cmdDemo(p *program.Program) {
 		io.WriteString(w, "Hello world!\n")
 	})
 
-	logger := log.DefaultLogger("http_server")
-
 	server := http.Server{
 		Addr:      addr,
 		TLSConfig: &tlsCfg,
 		Handler:   mux,
-		ErrorLog:  logger.StdLogger(log.LevelError),
+		ErrorLog:  stdlog.New(io.Discard, "", 0),
 	}
 
 	// Wait for a certificate and start the HTTP server

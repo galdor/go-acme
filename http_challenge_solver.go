@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	stdlog "log"
 	"maps"
 	"net"
 	"net/http"
@@ -62,7 +63,7 @@ func NewHTTPChallengeSolver(cfg HTTPChallengeSolverCfg) (*HTTPChallengeSolver, e
 	s.httpServer = &http.Server{
 		Addr:     cfg.Address,
 		Handler:  &s,
-		ErrorLog: logger.StdLogger(log.LevelError),
+		ErrorLog: stdlog.New(io.Discard, "", 0),
 
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       10 * time.Second,
