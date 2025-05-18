@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"go.n16f.net/acme"
+	"go.n16f.net/acme/pkg/acme"
 	"go.n16f.net/log"
 	"go.n16f.net/program"
 )

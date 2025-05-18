@@ -16,7 +16,7 @@ const (
 	PebbleHTTPChallengeSolverAddress = ":5002"
 )
 
-//go:embed data/pebble-ca.crt
+//go:embed pebble-ca.crt
 var PebbleCACertificateData []byte
 
 func PebbleCACertificate() *x509.Certificate {

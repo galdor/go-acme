@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"go.n16f.net/acme"
+	"go.n16f.net/acme/pkg/acme"
 	"go.n16f.net/program"
 )
 
