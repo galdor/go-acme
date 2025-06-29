@@ -13,7 +13,7 @@ import (
 
 const (
 	PebbleDirectoryURI               = "https://localhost:14000/dir"
-	PebbleHTTPChallengeSolverAddress = ":5002"
+	PebbleHTTPChallengeSolverAddress = "localhost:5002"
 )
 
 //go:embed pebble-ca.crt
