@@ -213,6 +213,7 @@ func (c *Client) sendRequestWithNonce(ctx context.Context, method, uri string, r
 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
+		err = UnwrapOpError(err, "read")
 		return res, fmt.Errorf("cannot read response body: %w", err)
 	}
 

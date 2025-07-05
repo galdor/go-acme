@@ -204,11 +204,13 @@ func (s *HTTPChallengeSolver) sendUpstreamRequest(req *http.Request) (*http.Resp
 	}
 
 	if err := req.Write(s.upstreamConn); err != nil {
+		err = UnwrapOpError(err, "write")
 		return nil, fmt.Errorf("cannot write request: %w", err)
 	}
 
 	res, err := http.ReadResponse(s.upstreamReader, req)
 	if err != nil {
+		err = UnwrapOpError(err, "read")
 		return nil, fmt.Errorf("cannot read response: %w", err)
 	}
 
