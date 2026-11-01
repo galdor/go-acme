@@ -8,8 +8,7 @@ import (
 )
 
 // The CA certificate is part of the Pebble repository
-// (https://github.com/letsencrypt/pebble/tree/main/test/certs) and has not
-// changed in 7+ years.
+// (https://github.com/letsencrypt/pebble/tree/main/test/certs).
 
 const (
 	PebbleDirectoryURI               = "https://localhost:14000/dir"
