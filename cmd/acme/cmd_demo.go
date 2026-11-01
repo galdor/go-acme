@@ -43,8 +43,10 @@ func cmdDemo(p *program.Program) {
 
 	go func() {
 		for ev := range eventChan {
-			if ev.Error != nil {
-				p.Fatal("cannot order certificate: %v", ev.Error)
+			if ev.Error == nil {
+				p.Info("certificate %q renewed", ev.CertificateData.Name)
+			} else {
+				p.Error("cannot order certificate: %v", ev.Error)
 			}
 		}
 	}()
