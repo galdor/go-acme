@@ -12,14 +12,18 @@ type CertificateWorker struct {
 	Log    *log.Logger
 	Client *Client
 
-	ctx            context.Context
-	certData       *CertificateData
-	orderURI       string
-	certificateURI string
-	eventChan      chan *CertificateEvent
+	ctx                    context.Context
+	certData               *CertificateData
+	lastCertExpirationTime *time.Time
+	orderURI               string
+	certificateURI         string
+	eventChan              chan *CertificateEvent
 }
 
-func (c *Client) startCertificateWorker(ctx context.Context, certData *CertificateData, eventChan chan *CertificateEvent) {
+func (c *Client) startCertificateWorker(
+	ctx context.Context, certData *CertificateData,
+	eventChan chan *CertificateEvent,
+) {
 	logData := log.Data{
 		"certificate": certData.Name,
 	}
@@ -82,13 +86,17 @@ func (w *CertificateWorker) main() {
 	retryLoop:
 		for {
 			if err := w.orderCertificate(); err != nil {
-				// If we cannot obtain a certificate and we do not have one,
+				// If we cannot obtain a certificate and we never generated one,
 				// stop right now: if we are trying to start a server, we cannot
 				// do anything until we have this first certificate.
-				if !w.certData.ContainsCertificate() {
+				if w.lastCertExpirationTime == nil {
 					w.sendError(err)
 					return
 				}
+
+				w.Log.Error("cannot renew certificate "+
+					"(current one expires on %s): %v",
+					w.lastCertExpirationTime.Format(time.RFC3339), err)
 
 				w.Log.Debug(1, "retrying in %v", retryDelay)
 				if !w.wait(retryDelay) {
@@ -141,6 +149,8 @@ func (w *CertificateWorker) onCertificateDataReady() {
 	//
 	// Remember that once we have called extractCopy(), w.certData does not
 	// contain a certificate chain anymore.
+
+	w.lastCertExpirationTime = new(w.certData.LeafCertificate().NotAfter)
 
 	certData := w.certData.extractCopy()
 
@@ -198,7 +208,9 @@ func (w *CertificateWorker) validateAuthorizations() error {
 	return w.finalizeOrder()
 }
 
-func (w *CertificateWorker) validateAuthorization(authURI string, auth *Authorization) error {
+func (w *CertificateWorker) validateAuthorization(
+	authURI string, auth *Authorization,
+) error {
 	w.Log.Info("validating authorization %q", auth.Identifier)
 
 	challenge := w.Client.selectAuthorizationChallenge(auth)
@@ -225,7 +237,9 @@ func (w *CertificateWorker) validateAuthorization(authURI string, auth *Authoriz
 	return nil
 }
 
-func (w *CertificateWorker) solveChallenge(challenge *Challenge, auth *Authorization) error {
+func (w *CertificateWorker) solveChallenge(
+	challenge *Challenge, auth *Authorization,
+) error {
 	w.Log.Info("solving challenge %q for authorization %q",
 		challenge.Type, auth.Identifier)
 
