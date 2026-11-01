@@ -46,22 +46,21 @@ func (c *Client) Certificate(name string) *CertificateData {
 	return certData
 }
 
-func (c *Client) WaitForCertificate(ctx context.Context, name string) *CertificateData {
-	c.certificatesMutex.Lock()
+func (c *Client) WaitForCertificate(
+	ctx context.Context, name string,
+) *CertificateData {
+	c.certificatesMutex.RLock()
 
 	if certData := c.certificates[name]; certData != nil {
-		c.certificatesMutex.Unlock()
+		c.certificatesMutex.RUnlock()
 		return certData
 	}
 
 	ch := c.addCertificateWaiter(name)
 
-	c.certificatesMutex.Unlock()
+	c.certificatesMutex.RUnlock()
 
-	defer func() {
-		c.removeCertificateWaiter(name, ch)
-		close(ch)
-	}()
+	defer c.removeCertificateWaiter(name, ch)
 
 	select {
 	case certData := <-ch:
@@ -74,28 +73,35 @@ func (c *Client) WaitForCertificate(ctx context.Context, name string) *Certifica
 }
 
 func (c *Client) addCertificateWaiter(name string) chan *CertificateData {
-	ch := make(chan *CertificateData)
+	ch := make(chan *CertificateData, 1)
 
 	c.certificateWaitersMutex.Lock()
-
-	chs := c.certificateWaiters[name]
-	c.certificateWaiters[name] = append(chs, ch)
-
+	c.certificateWaiters[name] = append(c.certificateWaiters[name], ch)
 	c.certificateWaitersMutex.Unlock()
 
 	return ch
 }
 
-func (c *Client) removeCertificateWaiter(name string, ch chan *CertificateData) {
+func (c *Client) removeCertificateWaiter(
+	name string, ch chan *CertificateData,
+) {
 	c.certificateWaitersMutex.Lock()
+	defer c.certificateWaitersMutex.Unlock()
 
 	chs := c.certificateWaiters[name]
-	c.certificateWaiters[name] = slices.DeleteFunc(chs,
-		func(ch2 chan *CertificateData) bool {
-			return ch2 == ch
-		})
+	if len(chs) == 0 {
+		return
+	}
 
-	c.certificateWaitersMutex.Unlock()
+	chs = slices.DeleteFunc(chs, func(ch2 chan *CertificateData) bool {
+		return ch2 == ch
+	})
+
+	if len(chs) == 0 {
+		delete(c.certificateWaiters, name)
+	} else {
+		c.certificateWaiters[name] = chs
+	}
 }
 
 func (c *Client) storeCertificate(certData *CertificateData) {
@@ -106,12 +112,15 @@ func (c *Client) storeCertificate(certData *CertificateData) {
 	c.certificates[name] = certData
 
 	c.certificateWaitersMutex.Lock()
-	for _, ch := range c.certificateWaiters[name] {
-		ch <- certData
-	}
+	chs := c.certificateWaiters[name]
+	delete(c.certificateWaiters, name)
 	c.certificateWaitersMutex.Unlock()
 
 	c.certificatesMutex.Unlock()
+
+	for _, ch := range chs {
+		ch <- certData
+	}
 }
 
 func (c *Client) RequestCertificate(ctx context.Context, name string, identifiers []Identifier, validity int) (<-chan *CertificateEvent, error) {
