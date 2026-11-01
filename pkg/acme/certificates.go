@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -115,8 +116,10 @@ func (c *Client) storeCertificate(certData *CertificateData) {
 
 func (c *Client) RequestCertificate(ctx context.Context, name string, identifiers []Identifier, validity int) (<-chan *CertificateEvent, error) {
 	certData, err := c.Cfg.DataStore.LoadCertificateData(name)
-	if err != nil && err != ErrCertificateNotFound {
-		return nil, fmt.Errorf("cannot load certificate: %w", err)
+	if err != nil {
+		if !errors.Is(err, ErrCertificateNotFound) {
+			return nil, fmt.Errorf("cannot load certificate: %w", err)
+		}
 	}
 
 	var sameIds, sameValidity bool
