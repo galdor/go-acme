@@ -217,7 +217,7 @@ func (c *Client) sendRequestWithNonce(ctx context.Context, method, uri string, r
 		return res, fmt.Errorf("cannot read response body: %w", err)
 	}
 
-	if status := res.StatusCode; status < 200 || status > 300 {
+	if status := res.StatusCode; status < 200 || status >= 300 {
 		var details ProblemDetails
 		if err := json.Unmarshal(data, &details); err == nil {
 			return res, &details
