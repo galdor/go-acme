@@ -65,7 +65,10 @@ func main() {
 			Log:          logger,
 			DataStore:    dataStore,
 			DirectoryURI: directoryURI,
-			ContactURIs:  []string{contactURI},
+		}
+
+		if contactURI != "" {
+			clientCfg.ContactURIs = []string{contactURI}
 		}
 
 		if usePebble {
